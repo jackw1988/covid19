@@ -6,6 +6,13 @@
     where I assume I can pull by pointing to:
         https://opendata.ecdc.europa.eu/covid19/casedistribution/csv
   
+    TODO
+      - add bar chart showing daily cases+deaths (stacked) along bottom
+        of right chart (only there on hover)
+      - grey out all other lines
+      - add dropdown
+      - add option to clear line on click
+
    -->
   <meta charset="utf-8">
   <head>
@@ -37,7 +44,6 @@
 
       .line {
         fill: none;
-        /* stroke: #ffab00; */
         stroke-width: 3;
       }
 
@@ -443,6 +449,8 @@
                 var totalLength = this.getTotalLength();
                 return totalLength;
               })
+              .on("mouseover", handleLineMouseOver)
+              .on("mouseout", handleLineMouseOut)
               .transition()
                 .duration(1000)
                 .ease(d3.easeLinear)
@@ -475,15 +483,20 @@
       var lineStuff = d3.select("#linegraph")
         .select("svg")
         .select("g")
-
-
       lineStuff.selectAll(".line")
                .remove();
       lineStuff.selectAll(".legend-entry")
                .remove();
-
       lineData = [];
-
     }
+
+    function handleLineMouseOver(d, i) {
+      d3.select(this).style("stroke-width", "6px");
+    }
+
+    function handleLineMouseOut() {
+      d3.select(this).style("stroke-width", "3px");
+    }
+
   </script>
 </html>
