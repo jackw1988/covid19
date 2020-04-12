@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+  <!-- the data.csv is got from
+    https://data.europa.eu/euodp/en/data/dataset/covid-19-coronavirus-data
+
+    where I assume I can pull by pointing to:
+        https://opendata.ecdc.europa.eu/covid19/casedistribution/csv
+  
+   -->
+  <meta charset="utf-8">
+  <head>
+    <style>
+      .datapoint {
+        stroke: darkgray;
+        stroke-width: 1px;
+        opacity: 0.45;
+      }
+
+      .label {
+        font-size: 10px;
+        color: darkgray;
+        font-family: 'Open Sans Condensed', sans-serif;
+      }
+
+      .legend-entry {
+        padding: 2px;
+        font-size: 14px;
+        font-family: 'Open Sans Condensed', sans-serif;    
+      }
+      
+      #date {
+        font-family: 'Open Sans Condensed', sans-serif;
+        color: lightgray;
+        font-weight: 300;
+        font-size: 48px;
+      }
+
+      .line {
+        fill: none;
+        /* stroke: #ffab00; */
+        stroke-width: 3;
+      }
+
+      .track-inset {
+        stroke: #fff;
+      }
+
+      #myContainer {
+        margin: 0;
+        padding: 0;
+      }
+
+      .axislabel {
+        font-family: 'Open Sans Condensed', serif, sans-serif; 
+        font-size: 32px;
+      }
+
+      svg {
+        overflow: visible;
+      }
+
+    </style>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <script src="https://d3js.org/d3-fetch.v1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.4/lodash.min.js"></script>
+    <script src="https://unpkg.com/d3-simple-slider@0.1.2/build/d3-simple-slider.js"></script>  
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+  </head>
+  <body>
+    <div id="date"></div>
+    <div class="container" id="myContainer">
+      <div class="row">
+        <div class="col-sm-6" id="slider"></div>
+        <div class="col-sm-6" id="controls">
+          <button onClick="clearFn()">clear</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-sm-6" id="graph"></div>
+        <div class="col-sm-6" id="linegraph"></div>
+      </div>
+    </div>
+  </body>
+  <script>
+
+    var lineData = [];
+
+    // d3.csv("static/data.csv").then(function(data) {
+    d3.csv("https://cors-anywhere.herokuapp.com/"
+      + "https://opendata.ecdc.europa.eu/covid19/casedistribution/csv").then(function(data) {
+
+      // add a d3 date to each column
+      var startDate = new Date;
+      var endDate = new Date;  // today
+      var numDeaths = 0;
+      var numCases = 0;
+      var firstDeathDate = new Date;
+
+      // work out startDate
+      for (var i=0; i<data.length; i++) {
+        let row = data[i];
+        let d = new Date(row.year, row.month-1, row.day)
+        data[i].date = d;
+        
+        if (d3.timeDay.count(startDate, d) < 0) {
+          startDate = d;
+        }
+      }
+
+      // now parse to integer deaths and cases and work out num days
+      for (var i=0; i<data.length; i++) {
+        let row = data[i];
+        let d = data[i].date;
+        // need to convert to integer
+        var rowDeaths = parseInt(row.deaths);
+        var rowCases = parseInt(row.cases);
+        data[i].deaths = rowDeaths;
+        data[i].cases = rowCases;
+
+        let numDays = d3.timeDay.count(startDate, d);
+        data[i].numDays = numDays;
+      }
+
+      var totalDays = d3.timeDay.count(startDate, endDate);
+      var caseInterp = d3.interpolateLab("white", "red");
+      // group data by country
+      var byCountry = d3.nest()
+        .key(function(d) { return d.countriesAndTerritories;})
+          .sortValues(function(a,b) { return a.numDays - b.numDays; })
+        .entries(data);
+
+      /* go through each of the countries one at a time & calculate the
+       * cumulative cases and deaths.
+       */
+      for (var i=0; i < byCountry.length; i++) {
+        let country = byCountry[i];
+        let values = country.values;
+
+        // if a country didn't start recording on the start date, need to
+        // offset their movement on the chart 
+        country['startDelta'] = d3.timeDay.count(startDate, values[0].date);
+
+        var firstDeathDate = startDate;
+
+        for (var j=1; j < values.length; j++) {
+          values[j].cases = values[j-1].cases + values[j].cases;
+          values[j].deaths = values[j-1].deaths + values[j].deaths;
+
+          // if still zero keep incrementing firstDeathDate
+          if (values[j].deaths === 0) {
+            firstDeathDate = values[j].date; 
+          }
+
+          if (values[j].deaths > numDeaths) {
+            numDeaths = values[j].deaths;
+          }
+
+          if (values[j].cases > numCases) {
+            numCases = values[j].cases;
+          }
+        }
+
+        country['firstDeathDate'] = d3.timeDay.count(startDate, firstDeathDate);
+      }
+
+      // create SVG
+
+      /* margin for the svg plot itself
+         excluding the axis & labels
+      */
+      var margin = {top: 5, right: 5, bottom: 70, left: 70};
+
+      // plot height and width
+      // 400 should become div width
+      var w = 500 - margin.left - margin.right;
+      var h = 450 - margin.bottom - margin.top;
+      
+      var svg = d3.select("#graph")
+        .append("svg")
+          .attr("width", w+margin.left+margin.right)
+          .attr("height", h+margin.top+margin.bottom)
+        .append("g")
+          .attr("transform",
+                "translate(" + margin.left + "," + margin.top + ")");
+
+      var slider = d3Slider.sliderHorizontal()
+        .domain([0, totalDays])
+        .width(300)
+        .tickFormat(d3.format('1'))
+        .ticks(totalDays/5)
+        .default(0)
+        .on('onchange', val => {
+          // TODO interpolate not hard change
+          changeData(val)
+        });
+
+      // define data scales
+      var x = d3.scaleLinear()
+        .domain([0, numCases])
+        .range([10, w-10]);
+
+      var y = d3.scaleLinear()
+        .domain([0, numDeaths])
+        .range([h-10, 10]);  // bit of margin
+
+      var colorRange = d3.scaleLinear()
+        .domain([0, numCases])
+        .range([0, 1]);
+
+      var dateRange = d3.scaleLinear()
+        .domain([0, totalDays])
+        .range([0, 1]);
+
+      // x axis group
+      svg.append("g")
+        .attr("class", "xaxis")
+        .attr("transform", "translate(0,"+h+")")
+        .call(d3.axisBottom(x)
+                .tickFormat(d3.format(".2s")));
+
+      // text label for the x axis
+      svg.append("text")            
+        .attr("transform",
+              "translate(" + (w/2) + " ," + 
+                           (h + margin.top + 50) + ")")
+        .style("text-anchor", "middle")
+        .attr("class", "axislabel")
+        .text("cases");
+
+      // y axis group
+      svg.append("g")
+        .attr("class", "yaxis")
+        .call(d3.axisLeft(y)
+                .tickFormat(d3.format(".2s")));
+
+      // text label for the y axis
+      svg.append("text")
+          .attr("transform", "rotate(-90)")
+          .attr("y", 0 - margin.left)
+          .attr("x", 0 - (h / 2))
+          .attr("dy", "1em")
+          .attr("class", "axislabel")
+          .style("text-anchor", "middle")
+          .text("deaths");      
+
+      // begin on day0
+      var entered = svg.selectAll(".datapoint")
+        .data(byCountry)
+        .enter();
+      
+      entered.append("circle")
+        .attr("class", "datapoint")
+        .attr("cx", function (d) { return x(d.values[0].cases); })
+        .attr("cy", function (d) { return y(d.values[0].deaths); })
+        .attr("r", function(d) { return d.values[0].cases**0.3; })
+        .attr("fill", function(d) {return caseInterp(colorRange(0))})
+        .on("click", addLinePlot);
+
+      entered.append("text")
+        .attr("class", "label");
+        // .attr("dx", function(d){return x(d.values[0].cases)-10;})
+        // .attr("dy", function(d){return y(d.values[0].deaths)-5;});
+       
+      d3.select("#date")
+        .append("text")
+        .text(startDate.toDateString());
+
+      function calculateVal(val, delta, values) {
+        val = Math.round(val);
+
+        // this means the country hasn't recorded yet
+        if (delta > val) {
+          return 0;
+        }
+
+        // maybe the country stopped recording?
+        var val_;
+        if (val > values.length - 1) {
+          val_ = values.length - 1;
+        } else { val_ = val;}
+        return val_;
+      }
+
+      function changeData(val) {
+        svg.selectAll(".datapoint")
+          .transition()
+          .duration(100)
+            .ease(d3.easeLinear)
+            .attr("cx", function (d) {
+              let val_ = calculateVal(val, d.delta, d.values);
+              return x(d.values[val_].cases); })
+            .attr("cy", function (d) {
+              let val_ = calculateVal(val, d.delta, d.values);
+              return y(d.values[val_].deaths);
+            })
+            .attr("r", function(d) {
+              let val_ = calculateVal(val, d.delta, d.values);
+              return d.values[val_].cases**0.3;
+            })
+            .attr("fill", function(d) {
+              let val_ = calculateVal(val, d.delta, d.values);
+              var i = d.values[val_].cases;
+              return caseInterp(colorRange(i))});   
+
+        svg.selectAll(".label")
+          .transition()
+          .duration(100)
+            .ease(d3.easeLinear)
+            .attr("dx", function(d){
+              let val_ = calculateVal(val, d.delta, d.values);
+              return x(d.values[val_].cases)-10;})
+            .attr("dy", function(d){
+              let val_ = calculateVal(val, d.delta, d.values);
+              return y(d.values[val_].deaths)+2.5;})
+            .text(function(d){
+              let val_ = calculateVal(val, d.delta, d.values);
+              if ((d.values[val_].cases > 50000) | d.values[val_].deaths > 2000) {
+                return d.values[val_].countryterritoryCode;
+              } else {
+                return ""
+              }});
+
+        d3.select("#date")
+          .text(function() { return d3.interpolateDate(startDate, endDate)(dateRange(val)).toDateString()});
+      }
+      
+      d3.select("#slider")
+        .append("svg")
+        .attr("width", 500)
+        .attr("height", 60)
+        .append('g')
+        .attr("transform", "translate(10,10)")
+        .call(slider);
+
+      var lsvg = d3.select("#linegraph").append("svg")
+          .attr("width", w+margin.left+margin.right)
+          .attr("height", h+margin.top+margin.bottom)
+        .append("g")
+          .attr("id", "graphg")
+          .attr("transform",
+                "translate("+margin.left+","+margin.top+")");
+
+      var xScale = d3.scaleLinear()
+        .domain([0, totalDays])  // input scale
+        .range([0, w]); // maps to output scale (window)
+
+      // log scale
+      var yScale = d3.scaleLog()
+        .domain([1, numDeaths])
+        .range([h, 0]);
+
+      // x axis group
+      lsvg.append("g")
+          .attr("class", "x axis")
+          .attr("transform", "translate(0,"+h+")")
+          .call(d3.axisBottom(xScale));
+
+      // text label for the x axis
+      lsvg.append("text")            
+        .attr("transform",
+              "translate(" + (w/2) + " ," + 
+                           (h + margin.top + 50) + ")")
+        .style("text-anchor", "middle")
+        .attr("class", "axislabel")
+        .text("days");
+
+      // y axis group
+      lsvg.append("g")
+        .attr("class", "y axis")
+        .call(d3.axisLeft(yScale));
+
+      // text label for the y axis
+      lsvg.append("text")
+          .attr("transform", "rotate(-90)")
+          .attr("y", 0 - margin.left)
+          .attr("x", 0 - (h / 2))
+          .attr("dy", "1em")
+          .attr("class", "axislabel")
+          .style("text-anchor", "middle")
+          .text("deaths");      
+
+      // TODO - make this nice
+      var color = d3.scaleLinear()
+        .range(["red", "lightred"])
+        .domain([0, 1.0])
+        .interpolate(d3.interpolateHsl);
+
+      function keyFunc(d, i) {
+        return d.key;
+      }
+
+      function addLinePlot(data, i) {     
+
+        /* first check if the country is already present
+        ( & remove if necessary) */
+        var country = data.key;
+        var len = lineData.length;
+        lineData = lineData.filter(function(d) { return d.key !== country;});
+        lsvg.selectAll(".line")
+          .data(lineData, keyFunc)
+          .exit()
+          .remove();
+
+        lsvg.selectAll(".legend-entry")
+          .data(lineData, keyFunc)
+          .exit()
+          .remove();
+
+        // if removed, return
+        if (lineData.length < len) {return;}
+
+        // update data
+        var col = d3.interpolateOrRd(Math.random()*0.9 + 0.1);
+        data['col'] = col;
+        lineData.push(data);
+
+        // path object
+        lsvg.selectAll(".line")
+          .data(lineData, keyFunc)
+          .enter()
+            .append("path")
+              .attr("class", "line")
+              .attr("stroke", function(d) {return col; })
+              .attr("d", function(data) {
+                var delta = data.firstDeathDate;
+                var line = d3.line()
+                  .x(function(d) {
+                    return xScale(d.numDays - delta);})
+                  .y(function(d) {
+                    return yScale(d.deaths);})
+                  .curve(d3.curveBasis);
+                  return line(data.values.filter(
+                    function(d){return d.deaths > 0}));
+              })
+              .attr("stroke-dasharray", function(d) {
+                var totalLength = this.getTotalLength();
+                console.log(totalLength);
+                return totalLength + " " + totalLength})
+              .attr("stroke-dashoffset", function(d) {
+                var totalLength = this.getTotalLength();
+                return totalLength;
+              })
+              .transition()
+                .duration(1000)
+                .ease(d3.easeLinear)
+                .attr("stroke-dashoffset", 0);
+
+        lsvg.selectAll(".legend-entry")
+          .data(lineData, keyFunc)
+          .enter()
+          .append("text")
+            .attr("class", "legend-entry")
+            .style("opacity", 0.0)
+            .attr("x", function(d, i) {
+              return xScale(
+                d.values[d.values.length-1].numDays - d.firstDeathDate) + 5;})
+            .attr("y", function(d, i){ return yScale(
+                d.values[d.values.length-1].deaths)})
+            .style("fill", "darkgray") // function(d){ return d.col;})
+            .text(function(d){ return d.key.replace(/_/g, " ");})
+            .attr("text-anchor", "left")
+            .style("alignment-baseline", "middle")
+            .transition()
+              .delay(1000)
+              .duration(100)
+              .ease(d3.easeLinear)
+              .style("opacity", 1.0);
+      }
+    });
+
+    function clearFn() {
+      var lineStuff = d3.select("#linegraph")
+        .select("svg")
+        .select("g")
+
+
+      lineStuff.selectAll(".line")
+               .remove();
+      lineStuff.selectAll(".legend-entry")
+               .remove();
+
+      lineData = [];
+
+    }
+  </script>
+</html>
