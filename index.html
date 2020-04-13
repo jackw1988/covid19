@@ -12,7 +12,8 @@
       - grey out all other lines
       - add dropdown
       - add option to clear line on click
-
+      - format axes on the right
+      - add dashed line with max value
    -->
   <meta charset="utf-8">
   <head>
@@ -93,6 +94,17 @@
   <script>
 
     var lineData = [];
+    var totalDays, numCases, numDeaths;
+    var svg, lsvg;
+
+    var nDeaths = 1;
+
+    var margin = {top: 5, right: 5, bottom: 70, left: 70};
+
+    // plot height and width
+    // 400 should become div width
+    var w = 500 - margin.left - margin.right;
+    var h = 450 - margin.bottom - margin.top;
 
     // d3.csv("static/data.csv").then(function(data) {
     d3.csv("https://cors-anywhere.herokuapp.com/"
@@ -101,9 +113,8 @@
       // add a d3 date to each column
       var startDate = new Date;
       var endDate = new Date;  // today
-      var numDeaths = 0;
-      var numCases = 0;
-      var firstDeathDate = new Date;
+      numDeaths = 0;
+      numCases = 0;
 
       // work out startDate
       for (var i=0; i<data.length; i++) {
@@ -130,7 +141,7 @@
         data[i].numDays = numDays;
       }
 
-      var totalDays = d3.timeDay.count(startDate, endDate);
+      totalDays = d3.timeDay.count(startDate, endDate);
       var caseInterp = d3.interpolateLab("white", "red");
       // group data by country
       var byCountry = d3.nest()
@@ -149,15 +160,17 @@
         // offset their movement on the chart 
         country['startDelta'] = d3.timeDay.count(startDate, values[0].date);
 
-        var firstDeathDate = startDate;
+        var nthDeathDate = startDate;
 
+        values[0].newCases = values[0].cases;
         for (var j=1; j < values.length; j++) {
+          values[j].newCases = values[j].cases;
           values[j].cases = values[j-1].cases + values[j].cases;
           values[j].deaths = values[j-1].deaths + values[j].deaths;
 
-          // if still zero keep incrementing firstDeathDate
+          // if still zero keep incrementing nthDeathDate
           if (values[j].deaths === 0) {
-            firstDeathDate = values[j].date; 
+            nthDeathDate = values[j].date; 
           }
 
           if (values[j].deaths > numDeaths) {
@@ -169,7 +182,7 @@
           }
         }
 
-        country['firstDeathDate'] = d3.timeDay.count(startDate, firstDeathDate);
+        country['nthDeathDate'] = d3.timeDay.count(startDate, nthDeathDate);
       }
 
       // create SVG
@@ -177,14 +190,8 @@
       /* margin for the svg plot itself
          excluding the axis & labels
       */
-      var margin = {top: 5, right: 5, bottom: 70, left: 70};
-
-      // plot height and width
-      // 400 should become div width
-      var w = 500 - margin.left - margin.right;
-      var h = 450 - margin.bottom - margin.top;
       
-      var svg = d3.select("#graph")
+      svg = d3.select("#graph")
         .append("svg")
           .attr("width", w+margin.left+margin.right)
           .attr("height", h+margin.top+margin.bottom)
@@ -341,7 +348,7 @@
         .attr("transform", "translate(10,10)")
         .call(slider);
 
-      var lsvg = d3.select("#linegraph").append("svg")
+      lsvg = d3.select("#linegraph").append("svg")
           .attr("width", w+margin.left+margin.right)
           .attr("height", h+margin.top+margin.bottom)
         .append("g")
@@ -431,19 +438,21 @@
               .attr("class", "line")
               .attr("stroke", function(d) {return col; })
               .attr("d", function(data) {
-                var delta = data.firstDeathDate;
+                var ld = data.values.filter(
+                    function(d){return d.deaths > nDeaths});
+                var delta = data.nthDeathDate;
+                var numDeathsDay0 = ld[0].deaths;
                 var line = d3.line()
                   .x(function(d) {
                     return xScale(d.numDays - delta);})
                   .y(function(d) {
-                    return yScale(d.deaths);})
+                    // + 1 for log scale
+                    return yScale(d.deaths - numDeathsDay0 + 1);})
                   .curve(d3.curveBasis);
-                  return line(data.values.filter(
-                    function(d){return d.deaths > 0}));
+                  return line(ld);
               })
               .attr("stroke-dasharray", function(d) {
                 var totalLength = this.getTotalLength();
-                console.log(totalLength);
                 return totalLength + " " + totalLength})
               .attr("stroke-dashoffset", function(d) {
                 var totalLength = this.getTotalLength();
@@ -464,7 +473,7 @@
             .style("opacity", 0.0)
             .attr("x", function(d, i) {
               return xScale(
-                d.values[d.values.length-1].numDays - d.firstDeathDate) + 5;})
+                d.values[d.values.length-1].numDays - d.nthDeathDate) + 5;})
             .attr("y", function(d, i){ return yScale(
                 d.values[d.values.length-1].deaths)})
             .style("fill", "darkgray") // function(d){ return d.col;})
@@ -490,12 +499,89 @@
       lineData = [];
     }
 
-    function handleLineMouseOver(d, i) {
-      d3.select(this).style("stroke-width", "6px");
+    function handleLineClick(d, i) {
+      d3.select(this).remove();
+      d3.select(".legend-entry").each(function(d, ii) {
+        if (ii === i) {
+          d3.select(this).remove();
+        }
+      });
     }
 
-    function handleLineMouseOut() {
-      d3.select(this).style("stroke-width", "3px");
+    function handleLineMouseOver(d, i) {
+      
+      // first modify all lines
+      d3.selectAll(".line").style("stroke", "lightgray")
+                           .style("stroke-width", "2px");
+
+      d3.select(this).style("stroke-width", "6px");
+      d3.select(this).style("stroke", d['col']);
+
+      d3.selectAll(".legend-entry").style("fill", function(d, ii) {
+        if (ii === i) {
+          return d['col'];
+        } else {
+          return "darkgray";
+        }
+      });
+
+      // now add barchart
+      addBarChart(d);
+
+    }
+
+    function handleLineMouseOut(barData) {
+      d3.selectAll(".line").style("stroke", function(d) {return d['col']})
+                           .style("stroke-width", "3px");
+      d3.selectAll(".legend-entry").style("fill", "darkgray");
+      d3.selectAll(".bar").remove();
+
+    }
+
+    function addBarChart(barData) {
+
+      var xScale = d3.scaleLinear()
+        .domain([0, totalDays])  // input scale
+        .range([0, w]); // maps to output scale (window)
+
+      var maxCases = 0;
+      for (var i=0; i < barData.values.length; i++ ) {
+        if (barData.values[i].newCases > maxCases) {
+          maxCases = barData.values[i].newCases;
+        }
+      }
+
+      // log scale
+      var yScale = d3.scaleLinear()
+        .domain([0, maxCases])
+        .range([h, 8*h/10.]);
+
+      var delta = barData.nthDeathDate;
+      lsvg.selectAll(".bar")
+          .data(barData.values.filter(function(d) {
+            return d.numDays > delta;}
+          ))
+        .enter()
+          .append("rect")
+          .attr("class", 'bar')
+          .style("fill", barData.col)
+          .attr("x", function(d, i) { return xScale(i); })
+          .attr("width", xScale(1))
+          .attr("y", function(d) {
+            return yScale(0); })
+          .attr("height", function(d) {
+            return h - yScale(0);
+          })
+          .transition()
+            .duration(100)
+              .ease(d3.easeLinear)
+              .attr("y", function(d) {
+                return yScale(d.newCases); })
+              .attr("height", function(d) {
+                return h - yScale(d.newCases);
+              })
+          .delay(function(d, i){return(i*10);});
+
     }
 
   </script>
