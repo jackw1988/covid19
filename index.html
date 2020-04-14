@@ -9,15 +9,16 @@
     TODO
       - add bar chart showing daily cases+deaths (stacked) along bottom
         of right chart (only there on hover)
-      - grey out all other lines
-      - add dropdown
-      - add option to clear line on click
-      - format axes on the right
       - add dashed line with max value
    -->
   <meta charset="utf-8">
   <head>
     <style>
+
+      #info {
+        font-size: 0.8em;
+      }
+      
       .datapoint {
         stroke: darkgray;
         stroke-width: 1px;
@@ -66,6 +67,23 @@
         overflow: visible;
       }
 
+      #menu1 {
+        background-color: indianred !important;
+        border-color: indianred !important;
+      }
+
+      #clearButton {
+        background-color: firebrick !important;
+        border-color: firebrick !important;
+      }
+
+      #country-drop-down {
+        height: auto;
+        max-height: 200px;
+        overflow-x: hidden;
+      }
+
+
     </style>
     <script src="https://d3js.org/d3.v5.min.js"></script>
     <script src="https://d3js.org/d3-fetch.v1.min.js"></script>
@@ -82,13 +100,27 @@
       <div class="row">
         <div class="col-sm-6" id="slider"></div>
         <div class="col-sm-6" id="controls">
-          <button onClick="clearFn()">clear</button>
+          <button id="clearButton"
+                  type="button"
+                  class="btn btn-primary"
+                  onClick="clearFn()">Clear</button>
+          <button class="btn btn-primary dropdown-toggle"
+                  id="menu1"
+                  type="button"
+                  data-toggle="dropdown">Add Country
+            <span class="caret"></span>
+          </button>
+          <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
+          </ul>
         </div>
       </div>
+      <div class="row">
+        <div class="col-sm-6" id="info">On the left see the number of deaths versus number of cases over time by dragging the scrollbar. Click a country to see their death toll over time on the right (hover over this to see daily case break down.</div></div>
       <div class="row">
         <div class="col-sm-6" id="graph"></div>
         <div class="col-sm-6" id="linegraph"></div>
       </div>
+      <div>data source: <a href="https://opendata.ecdc.europa.eu/">https://opendata.ecdc.europa.eu/</a></div>
     </div>
   </body>
   <script>
@@ -383,7 +415,8 @@
       // y axis group
       lsvg.append("g")
         .attr("class", "y axis")
-        .call(d3.axisLeft(yScale));
+        .call(d3.axisLeft(yScale).ticks(4)
+                .tickFormat(d3.format(".2s")));
 
       // text label for the y axis
       lsvg.append("text")
@@ -406,6 +439,11 @@
       }
 
       function addLinePlot(data, i) {     
+
+        // need to remove this too!
+        d3.selectAll(".line").style("stroke", function(d) {return d['col']})
+                           .style("stroke-width", "3px");
+        d3.selectAll(".bar").remove();
 
         /* first check if the country is already present
         ( & remove if necessary) */
@@ -460,6 +498,7 @@
               })
               .on("mouseover", handleLineMouseOver)
               .on("mouseout", handleLineMouseOut)
+              .on("click", addLinePlot)
               .transition()
                 .duration(1000)
                 .ease(d3.easeLinear)
@@ -486,6 +525,28 @@
               .ease(d3.easeLinear)
               .style("opacity", 1.0);
       }
+    
+      function addLinePlotFromText(country) {
+        var i;
+        for (i=0; i<byCountry.length; i++) {
+          if (country === byCountry[i].key) {break;}
+        }
+        data = byCountry[i];
+        addLinePlot(data, i);
+      }
+
+      // append country list to drop down
+      d3.select("#country-drop-down")
+        .selectAll(".country-li")
+        .data(byCountry)
+        .enter()
+        .append("li")
+          .attr('class', 'country-li')
+          .attr("role", "presentation")
+        .append("a")
+          .on("click", function(d) { addLinePlotFromText(d.key)})
+          .text(function(d) {return d.key;});
+
     });
 
     function clearFn() {
