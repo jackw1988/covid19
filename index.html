@@ -7,8 +7,6 @@
         https://opendata.ecdc.europa.eu/covid19/casedistribution/csv
   
     TODO
-      - add bar chart showing daily cases+deaths (stacked) along bottom
-        of right chart (only there on hover)
       - add dashed line with max value
    -->
   <meta charset="utf-8">
@@ -132,7 +130,7 @@
     var totalDays, numCases, numDeaths;
     var svg, lsvg;
 
-    var nDeaths = 1;
+    var nDeaths = 5;
 
     var margin = {top: 5, right: 5, bottom: 70, left: 70};
 
@@ -204,7 +202,7 @@
           values[j].deaths = values[j-1].deaths + values[j].deaths;
 
           // if still zero keep incrementing nthDeathDate
-          if (values[j].deaths === 0) {
+          if (values[j].deaths < nDeaths) {
             nthDeathDate = values[j].date; 
           }
 
@@ -303,7 +301,7 @@
         .attr("class", "datapoint")
         .attr("cx", function (d) { return x(d.values[0].cases); })
         .attr("cy", function (d) { return y(d.values[0].deaths); })
-        .attr("r", function(d) { return d.values[0].cases**0.3; })
+        .attr("r", function(d) { return d.values[0].cases**0.25; })
         .attr("fill", function(d) {return caseInterp(colorRange(0))})
         .on("click", addLinePlot);
 
@@ -354,8 +352,6 @@
         var startValue = slider.value();
         var endValue = slider.domain()[1];
         d3.select("#play").text("||");
-        
-        console.log(startValue, endValue, sliderPlaying);
 
         var newValue = startValue + 1;
         if (newValue < endValue + 1) {
@@ -376,18 +372,18 @@
           .duration(100)
             .ease(d3.easeLinear)
             .attr("cx", function (d) {
-              let val_ = calculateVal(val, d.delta, d.values);
+              let val_ = calculateVal(val, d.startDelta, d.values);
               return x(d.values[val_].cases); })
             .attr("cy", function (d) {
-              let val_ = calculateVal(val, d.delta, d.values);
+              let val_ = calculateVal(val, d.startDelta, d.values);
               return y(d.values[val_].deaths);
             })
             .attr("r", function(d) {
-              let val_ = calculateVal(val, d.delta, d.values);
-              return d.values[val_].cases**0.3;
+              let val_ = calculateVal(val, d.startDelta, d.values);
+              return d.values[val_].cases**0.25;
             })
             .attr("fill", function(d) {
-              let val_ = calculateVal(val, d.delta, d.values);
+              let val_ = calculateVal(val, d.startDelta, d.values);
               var i = d.values[val_].cases;
               return caseInterp(colorRange(i))});   
 
@@ -396,13 +392,13 @@
           .duration(100)
             .ease(d3.easeLinear)
             .attr("dx", function(d){
-              let val_ = calculateVal(val, d.delta, d.values);
-              return x(d.values[val_].cases)-10;})
+              let val_ = calculateVal(val, d.startDelta, d.values);
+              return x(d.values[val_].cases)-8;})
             .attr("dy", function(d){
-              let val_ = calculateVal(val, d.delta, d.values);
+              let val_ = calculateVal(val, d.startDelta, d.values);
               return y(d.values[val_].deaths)+2.5;})
             .text(function(d){
-              let val_ = calculateVal(val, d.delta, d.values);
+              let val_ = calculateVal(val, d.startDelta, d.values);
               if ((d.values[val_].cases > 50000) | d.values[val_].deaths > 2000) {
                 return d.values[val_].countryterritoryCode;
               } else {
@@ -451,7 +447,7 @@
                            (h + margin.top + 50) + ")")
         .style("text-anchor", "middle")
         .attr("class", "axislabel")
-        .text("days");
+        .text("days (since "+nDeaths + "th death)");
 
       // y axis group
       lsvg.append("g")
@@ -520,9 +516,12 @@
                 var ld = data.values.filter(
                     function(d){return d.deaths > nDeaths});
                 var delta = data.nthDeathDate;
+                console.log(ld);
+                console.log(data.key, delta);
                 var numDeathsDay0 = ld[0].deaths;
                 var line = d3.line()
                   .x(function(d) {
+                    console.log(data.key, d.numDays, delta);
                     return xScale(d.numDays - delta);})
                   .y(function(d) {
                     // + 1 for log scale
