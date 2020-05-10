@@ -1,0 +1,121 @@
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+    <style>
+      html, body, #svg {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+  </body>
+  <script>
+    var svg;
+    var margin = {top: 5, right: 5, bottom: 70, left: 70};
+    var byCountry;
+
+    d3.csv("https://cors-anywhere.herokuapp.com/"
+           + "https://opendata.ecdc.europa.eu/covid19/casedistribution/csv").then(function(data) {
+
+      // add a d3 date to each column
+      var startDate = new Date;
+      var endDate = new Date;  // today
+      var nDeaths = 5;
+      var numDeaths = 0;
+      var numCases = 0;
+
+      // work out startDate
+      for (var i=0; i<data.length; i++) {
+        let row = data[i];
+        let d = new Date(row.year, row.month-1, row.day)
+        data[i].date = d;
+        
+        if (d3.timeDay.count(startDate, d) < 0) {
+          startDate = d;
+        }
+      }
+
+      // now parse to integer deaths and cases and work out num days
+      for (var i=0; i<data.length; i++) {
+        let row = data[i];
+        let d = data[i].date;
+        // need to convert to integer
+        var rowDeaths = parseInt(row.deaths);
+        var rowCases = parseInt(row.cases);
+        data[i].deaths = rowDeaths;
+        data[i].cases = rowCases;
+
+        let numDays = d3.timeDay.count(startDate, d);
+        data[i].numDays = numDays;
+      }
+
+      totalDays = d3.timeDay.count(startDate, endDate);
+
+      // group data by country
+      byCountry = d3.nest()
+        .key(function(d) { return d.countriesAndTerritories;})
+          .sortValues(function(a,b) { return a.numDays - b.numDays; })
+        .entries(data);
+
+      /* go through each of the countries one at a time & calculate the
+      * cumulative cases and deaths.
+      */
+      for (var i=0; i < byCountry.length; i++) {
+        let country = byCountry[i];
+        let values = country.values;
+
+        // if a country didn't start recording on the start date, need to
+        // offset their movement on the chart 
+        country['startDelta'] = d3.timeDay.count(startDate, values[0].date);
+
+        var nthDeathDate = startDate;
+        values[0].newCases = values[0].cases;
+        values[0].newDeaths = values[0].cases;
+        for (var j=1; j < values.length; j++) {
+          values[j].newCases = values[j].cases;
+          values[j].newDeaths = values[j].deaths;
+          values[j].cases = values[j-1].cases + values[j].cases;
+          values[j].deaths = values[j-1].deaths + values[j].deaths;
+
+          // if still less than nDeaths keep incrementing nthDeathDate
+          if (values[j].deaths < nDeaths) {
+            nthDeathDate = values[j].date; 
+          }
+
+          if (values[j].deaths > numDeaths) {
+            numDeaths = values[j].deaths;
+          }
+
+          if (values[j].cases > numCases) {
+            numCases = values[j].cases;
+          }
+        }
+        country['nthDeathDate'] = d3.timeDay.count(startDate, nthDeathDate);
+      }
+    
+    
+      var svg = d3.select("body")
+        .append("svg")
+          .attr("id", "svg")
+        .append("g")
+          .attr("transform",
+                "translate(" + margin.left + "," + margin.top + ")");
+
+      // need to rejigg data so that there is a list of deaths, list of cases for each one
+      svg.selectAll("mylayers")
+          .data(byCountry)
+        .enter()
+          .append("path")
+          .style("fill", function(d) { return color(d.key); })
+          .attr("d", d3.area()
+        .x(function(d, i) { return x(d.values); })
+        .y0(function(d) { return y(d[0]); })
+        .y1(function(d) { return y(d[1]); })
+    )
+
+    
+    });
+  </script>
+</html>

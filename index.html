@@ -9,8 +9,9 @@
     TODO
       - add dashed line with max value
    -->
-  <meta charset="utf-8">
-  <head>
+   <head>
+    <meta charset="utf-8">
+    <meta name="viewport", content="width=device-width,initial-scale=1">
     <style>
 
       #info {
@@ -131,13 +132,13 @@
     var svg, lsvg;
 
     var nDeaths = 5;
-
     var margin = {top: 5, right: 5, bottom: 70, left: 70};
 
     // plot height and width
-    // 400 should become div width
-    var w = 500 - margin.left - margin.right;
-    var h = 450 - margin.bottom - margin.top;
+    var width = 480,
+        height = 380;
+    var w = width - margin.left - margin.right;
+    var h = height - margin.bottom - margin.top;
 
     // d3.csv("static/data.csv").then(function(data) {
     d3.csv("https://cors-anywhere.herokuapp.com/"
@@ -226,8 +227,9 @@
       
       svg = d3.select("#graph")
         .append("svg")
-          .attr("width", w+margin.left+margin.right)
-          .attr("height", h+margin.top+margin.bottom)
+          // .attr("width", w+margin.left+margin.right)
+          // .attr("height", h+margin.top+margin.bottom)
+          .attr("viewBox", `0 0 `+width+` `+height)
         .append("g")
           .attr("transform",
                 "translate(" + margin.left + "," + margin.top + ")");
@@ -418,8 +420,9 @@
         .call(slider);
 
       lsvg = d3.select("#linegraph").append("svg")
-          .attr("width", w+margin.left+margin.right)
-          .attr("height", h+margin.top+margin.bottom)
+          // .attr("width", w+margin.left+margin.right)
+          // .attr("height", h+margin.top+margin.bottom)
+          .attr("viewBox", `0 0 `+width+` `+height)
         .append("g")
           .attr("id", "graphg")
           .attr("transform",
