@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport", content="width=device-width,initial-scale=1">
+  </head>
+  <style>
+
+    .label {
+      font: light 9px sans-serif;
+      fill: lightgray;
+    }
+
+  </style>
+
+  <script src="https://d3js.org/d3.v5.min.js"></script>
+  <script src="https://d3js.org/d3-fetch.v1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.4/lodash.min.js"></script>
+  <script src="https://unpkg.com/d3-simple-slider@0.1.2/build/d3-simple-slider.js"></script>  
+  <link href="https://fonts.googleapis.com/css?family=Open+Sans+Condensed:300,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
+
+  <body>
+    <div id="date"></div>
+    <div class="container-fluid" id="myContainer">
+      <div class="row">
+        <div class="col-md-9" id="slider"></div>
+        <div class="col-md-3" id="controls">
+          <button id="play"
+                  type="button"
+                  class="btn btn-primary">></button>
+          <button id="clearButton"
+                  type="button"
+                  class="btn btn-primary"
+                  onClick="clearFn()">Clear</button>
+          <button class="btn btn-primary dropdown-toggle"
+                  id="menu1"
+                  type="button"
+                  data-toggle="dropdown">Add Country
+            <span class="caret"></span>
+          </button>
+          <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
+          </ul>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6" id="graph"></div>
+      </div>
+    </div>
+  </body>
+
+  <script>
+    var svg;
+    var margin = {top:5,right:5,bottom:70,left:70};
+    var width = 480,
+        height = 380;
+    var w = width - margin.left - margin.right;
+    var h = height - margin.bottom - margin.top;
+
+    // calculate limit of days, deaths and cases
+    var numDeaths=0,
+        totalDays=0,
+        numCases=0;
+
+    // simple end of array helper
+    function calculateVal(val, d) {
+      let val_ = Math.round(val);
+      // this means the country hasn't recorded yet
+      if (d.startDelta > val_) return 0;
+      if (val_ > d.values.length-1) {val_=d.values.length-1;}
+      return val_;
+    }
+
+    d3.csv("https://covid.ourworldindata.org/data/owid-covid-data.csv").then(function(data) {
+
+      // step 1: date to index
+      var startDate = new Date;
+      var endDate = new Date; // today
+      for (var i=0;i<data.length;i++) {
+        let row=data[i];
+        let d=new Date(row.date);
+        data[i].date_=d;
+        if(d3.timeDay.count(startDate,d)<0) startDate=d;
+      }
+
+      // step 2: group by country
+      var d = d3.nest()
+          .key(function(d) { return d.location;})
+          .sortValues(function(a,b) { return a.date_ - b.date_; })
+          .entries(data);
+
+      d=d.filter(function(d){return d.key!=="World"});
+
+      for(let i=0;i<d.length;i++) {
+        let vals=d[i].values;
+        let nc=parseFloat(vals[vals.length-1].total_cases_per_million);
+        let nd=parseFloat(vals[vals.length-1].total_deaths_per_million);
+        if(nd>numDeaths) {numDeaths=nd;}
+        if(nc>numCases) numCases=nc;
+        d[i]['startDelta'] = d3.timeDay.count(startDate, vals[0].date_);
+      }
+      totalDays=d3.timeDay.count(startDate,endDate);
+      var caseInterp = d3.interpolateLab("white", "red");
+
+      // step 3: svg axis
+      svg = d3.select("#graph")
+            .append("svg")
+            .attr("viewBox", `0 0 `+width+` `+height)
+            .append("g")
+            .attr("transform",
+                  "translate(" + margin.left + "," + margin.top + ")");
+
+      var slider = d3Slider.sliderHorizontal()
+        .domain([0, totalDays])
+        .width(500)
+        .tickFormat(d3.format('1'))
+        .ticks(totalDays/20)
+        .default(0)
+        .on('onchange', val => {
+          // TODO interpolate not hard change
+          changeData(val)
+        });
+
+
+      // define data scales
+      var x = d3.scaleLinear()
+        .domain([0, numCases])
+        .range([10, w-10]);
+
+      var y = d3.scaleLinear()
+        .domain([0, numDeaths])
+        .range([h-10, 10]);  // bit of margin
+
+      var colorRange = d3.scaleLinear()
+        .domain([0, numDeaths])
+        .range([0, 1]);
+
+      var dateRange = d3.scaleLinear()
+        .domain([0, totalDays])
+        .range([0, 1]);
+
+      // x axis group
+      svg.append("g")
+        .attr("class", "xaxis")
+        .attr("transform", "translate(0,"+h+")")
+        .call(d3.axisBottom(x)
+                .tickFormat(d3.format(".2s")));
+
+      // text label for the x axis
+      svg.append("text")            
+        .attr("transform",
+              "translate(" + (w/2) + " ," + 
+                           (h + margin.top + 50) + ")")
+        .style("text-anchor", "middle")
+        .attr("class", "axislabel")
+        .text("cases per mio");
+
+      // y axis group
+      svg.append("g")
+        .attr("class", "yaxis")
+        .call(d3.axisLeft(y)
+                .tickFormat(d3.format(".2s")));
+
+      // text label for the y axis
+      svg.append("text")
+          .attr("transform", "rotate(-90)")
+          .attr("y", 0 - margin.left)
+          .attr("x", 0 - (h / 2))
+          .attr("dy", "1em")
+          .attr("class", "axislabel")
+          .style("text-anchor", "middle")
+          .text("deaths per mio");
+              
+      // begin on day0
+      var entered = svg.selectAll(".datapoint")
+        .data(d)
+        .enter();
+      
+      entered.append("circle")
+        .attr("class", "datapoint")
+        .attr("cx", function (d) { return x(d.values[0].total_cases_per_million); })
+        .attr("cy", function (d) { return y(d.values[0].total_deaths_per_million); })
+        .style("stroke", "#000")
+        .style("stroke-width", 1);
+
+      entered.append("text")
+        .attr("class", "label");
+       
+      d3.select("#date")
+        .append("text")
+        .text(startDate.toDateString());
+
+      d3.select("#slider")
+        .append("svg")
+        .attr("width", 700)
+        .attr("height", 60)
+        .append('g')
+        .attr("transform", "translate(10,10)")
+        .call(slider);
+
+      function changeData(val) {
+        svg.selectAll(".datapoint")
+          .transition()
+          .duration(100)
+            .ease(d3.easeLinear)
+            .attr("cx", function (d) {
+              let val_ = calculateVal(val, d);
+              return x(d.values[val_].total_cases_per_million); })
+            .attr("cy", function (d) {
+              let val_ = calculateVal(val, d);
+              return y(d.values[val_].total_deaths_per_million);
+            })
+            .attr("r", function(d) {
+              let val_ = calculateVal(val, d);
+              return d.values[val_].total_deaths**0.5/50;
+            })
+            .attr("fill", function(d) {
+              let val_ = calculateVal(val, d);
+              var i = d.values[val_].total_deaths;
+              return caseInterp(colorRange(i))});   
+
+        svg.selectAll(".label")
+          .transition()
+          .duration(100)
+            .ease(d3.easeLinear)
+            .attr("dx", function(d){
+              let val_ = calculateVal(val, d);
+              return x(d.values[val_].total_cases_per_million)+d.values[val_].total_deaths**0.5/50+2;})
+            .attr("dy", function(d){
+              let val_ = calculateVal(val, d);
+              return y(d.values[val_].total_deaths_per_million)+2.5;})
+            .text(function(d){
+              let val_ = calculateVal(val, d);
+              if (d.values[val_].total_deaths > 10000) {
+                return d.key;
+              } else {
+                return ""
+              }
+            });
+
+
+        d3.select("#date")
+          .text(function() { return d3.interpolateDate(startDate, endDate)(dateRange(val)).toDateString()});
+      }
+    });
+
+  </script>
+
+
+</html>

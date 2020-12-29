@@ -1,374 +1,514 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport", content="width=device-width,initial-scale=1.0">
-  </head>
-  <style>
-    .label {
-      /* font: 9px sans-serif; */
-      fill: darkgray;
-      font-size: 50% !important;
-    }
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" , content="width=device-width,initial-scale=1.0">
+</head>
+<style>
+  div {
+    margin: 0;
+    padding: 0;
+  }
+
+  .datapoint {
+    stroke: darkgray;
+    stroke-width: 1px;
+    opacity: 0.8;
+  }
+
+  .label {
+    /* font: 9px sans-serif; */
+    fill: darkgray;
+    font-size: 50% !important;
+  }
+
+  #date {
+    font-size: 36px;
+  }
+
+  #menu1 {
+    background-color: rgb(231, 121, 121) !important;
+    border-color: rgb(231, 121, 121) !important;
+  }
+
+  #clearButton {
+    background-color: firebrick !important;
+    border-color: firebrick !important;
+  }
+
+  #addButton {
+    background-color: indianred !important;
+    border-color: indianred !important;
+  }
+
+  #country-drop-down {
+    height: auto;
+    max-height: 200px;
+    overflow-x: hidden;
+  }
+</style>
+
+<!-- d3 includes -->
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/lodash@4.17.4/lodash.min.js"></script>
+<script src="https://unpkg.com/d3-simple-slider@0.1.2/build/d3-simple-slider.js"></script>
 
 
-    #date {
-      font-size: 36px;
-    }
+<!-- jquery -->
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 
-  </style>
+<!-- pretty things -->
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
 
-  <!-- d3 includes -->
-  <script src="https://d3js.org/d3.v5.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.4/lodash.min.js"></script>
-  <script src="https://unpkg.com/d3-simple-slider@0.1.2/build/d3-simple-slider.js"></script>  
-  
-
-  <!-- jquery -->
-  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-
-  <!-- pretty things -->
-  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/css/bootstrap.min.css">
-  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
-
-  <body>
-    <div id="date"></div>
-    <div class="contained-fluid" id="main">
-      <div class="row">
-        <div class="col-md-9" id="slider"></div>
-        <div class="col-md-3" id="controls">
-        </div>
-      </div>
-      <div class="row">
-        <div class="col-md-6" id="graph0"></div>
-        <div class="col-md-6" id="graph1"></div>
+<body>
+  <div id="date"></div>
+  <div class="container-fluid" id="main">
+    <div class="row">
+      <div class="col-md-8" id="slider"></div>
+      <div class="col-md-4" id="controls">
+        <button id="play" type="button" class="btn btn-primary" onClick="playFn()">></button>
+        <button id="clearButton" type="button" class="btn btn-primary" onClick="clearFn()">Clear</button>
+        <button id="addButton" type="button" class="btn btn-primary" onClick="addAllFn()">Add All</button>
+        <button class="btn btn-primary dropdown-toggle" id="menu1" type="button" data-toggle="dropdown">Add Country
+          <span class="caret"></span>
+        </button>
+        <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
+        </ul>
       </div>
     </div>
+    <div class="row">
+      <div class="col-md-6" id="graph0"></div>
+      <div class="col-md-6" id="graph1"></div>
+    </div>
+  </div>
 
-  </body>
+</body>
 
-  <script>
-    // data location
-    var url="https://covid.ourworldindata.org/data/owid-covid-data.csv";
-    
-    // standard plotting margins
-    var margin = {top:5,right:5,bottom:70,left:70};
-    var width = 480,
-        height = 380;
+<script>
+  // data location
+  var url = "https://covid.ourworldindata.org/data/owid-covid-data.csv";
 
-    var tcvdId = "#graph0",
-        ncvdId = "#graph1",
-        dateId = "#date",
-        sliderId = "#slider";
-      
-    var bubbleSvgs = [];
-    var labels = ["United Kingdom", "United States"];  // labels to include
+  // standard plotting margins
+  var margin = {
+    top: 5,
+    right: 5,
+    bottom: 70,
+    left: 70
+  };
+  var width = 480,
+      height = 380;
 
-    // data variables
-    var data, startDate, endDate, bounds={}, totalDays;
+  var tcvdId = "#graph0",
+    ncvdId = "#graph1",
+    dateId = "#date",
+    countryDropDownId = "#country-drop-down",
+    sliderId = "#slider";
 
-    var tdpmRange, dateRange, deathRange;
+  var slider;
+  var bubbleSvgs = [];
+  var labels = []; // labels to include
+  var sliderPlaying = false;
 
-    // svg & d3 variables
-    var svg_tcvd, // total cases v deaths
-        svg_ncvd; // new cases v deaths
+  // data variables
+  var data, startDate, endDate, bounds = {},
+    totalDays;
 
-    var redInterp = d3.interpolateLab("white","red"); 
-    var blueInterp = d3.interpolateLab("white","blue"); 
+  var tdpmRange, dateRange, deathRange;
 
-    // functions
+  // svg & d3 variables
+  var svg_tcvd, // total cases v deaths
+    svg_ncvd; // new cases v deaths
 
-    /**
-     * take the raw data from ourworldindata and:
-     * calculate startDate, endDate (just today!),
-     * 
-     */
-    function processRawData(raw) {
-      let startDate = new Date;
-      let endDate = new Date; // today
-      
-      // bounds
-      let tcpm=0,
-          tdpm=0,
-          td=0;
-          ncs=0;
-          nds=0;
+  var redInterp = d3.interpolateLab("white", "red");
+  var blueInterp = d3.interpolateLab("white", "blue");
 
-      for (var i=0;i<raw.length;i++) {
-        let row=raw[i];
-        let d=new Date(row.date);
-        raw[i].date_=d;
-        if(d3.timeDay.count(startDate,d)<0) startDate=d;
-      }
+  // functions
 
-      // group by country, sort by date
-      let data = d3.nest()
-        .key(function(d) {return d.location;})
-        .sortValues(function(a,b) {return a.data_ - b.date_})
-        .entries(raw);
+  /**
+   * take the raw data from ourworldindata and:
+   * calculate startDate, endDate (just today!),
+   * 
+   */
+  function processRawData(raw) {
+    let startDate = new Date;
+    let endDate = new Date; // today
 
-      // remove the world data
-      data=data.filter(function(d){return d.key!=="World"});
+    // bounds
+    let tcpm = 0,
+      tdpm = 0,
+      td = 0;
+    ncs = 0;
+    nds = 0;
 
-      // work out the highest number of cases/deaths/...
-      for(let i=0;i<data.length;i++) {
-        let vals=data[i].values;
-        let tcpm_=parseFloat(vals[vals.length-1].total_cases_per_million);
-        let tdpm_=parseFloat(vals[vals.length-1].total_deaths_per_million);
-        let td_=parseFloat(vals[vals.length-1].total_deaths);
-        let ncs_=parseFloat(vals[vals.length-1].new_cases_smoothed_per_million);
-        let nds_=parseFloat(vals[vals.length-1].new_deaths_smoothed_per_million);
-
-        if(tcpm_>tcpm) tcpm = tcpm_;
-        if(tdpm_>tdpm) tdpm = tdpm_;
-        if(td_>td) td = td_;
-        if(ncs_>ncs) ncs = ncs_;
-        if(nds_>nds) nds = nds_;
-
-        // each country needs a delta for 'interpolation' purposes
-        // i.e. if the country wasn't recording from the start of
-        // the pandemic, then this is a convenience variable so we can
-        // plot by index, not by date.
-        data[i]['startDelta']=d3.timeDay.count(startDate, vals[0].date_);
-      }
-
-      bounds.total_cases_per_million = tcpm;
-      bounds.total_deaths_per_million = tdpm;
-      bounds.start_date = startDate;
-      bounds.end_date = endDate;
-      bounds.total_deaths = td;
-      bounds.new_cases_smoothed_per_million = ncs;
-      bounds.new_deaths_smoothed_per_million = nds;
-      console.log(bounds);
-      return [data, bounds];
+    for (var i = 0; i < raw.length; i++) {
+      let row = raw[i];
+      let d = new Date(row.date);
+      raw[i].date_ = d;
+      if (d3.timeDay.count(startDate, d) < 0) startDate = d;
     }
 
-    /**
-     * generic initialise bubble plot
-     */
-    function makeBubble(xVar, yVar, svgId, data, width, height, margin, bounds) {
-      var svg = d3.select(svgId)
-            .append("svg")
-            .attr("viewBox", `0 0 `+width+` `+height)
-            .append("g")
-            .attr("transform",
-                  "translate(" + margin.left + "," + margin.top + ")");
-      
-      var w = width - margin.left - margin.right;
-      var h = height - margin.bottom - margin.top;
+    // group by country, sort by date
+    let data = d3.nest()
+      .key(function (d) {
+        return d.location;
+      })
+      .sortValues(function (a, b) {
+        return a.data_ - b.date_
+      })
+      .entries(raw);
 
-      // axes
-      var x = d3.scaleLinear()
-        .domain([0, bounds[xVar]])
-        .range([10, w-10]);
-
-      var y = d3.scaleLinear()
-        .domain([0, bounds[yVar]])
-        .range([h-10, 10]);  // bit of margin
-
-      // x axis group
-      svg.append("g")
-        .attr("class", "xaxis")
-        .attr("transform", "translate(0,"+h+")")
-        .call(d3.axisBottom(x)
-                .tickFormat(d3.format(".2s")));
-
-      // text label for the x axis
-      svg.append("text")            
-        .attr("transform",
-              "translate(" + (w/2) + " ," + 
-                           (h + margin.top + 50) + ")")
-        .style("text-anchor", "middle")
-        .attr("class", "axislabel")
-        .text("cases per mio");
-
-      // y axis group
-      svg.append("g")
-        .attr("class", "yaxis")
-        .call(d3.axisLeft(y)
-                .tickFormat(d3.format(".2s")));
-
-      // text label for the y axis
-      svg.append("text")
-          .attr("transform", "rotate(-90)")
-          .attr("y", 0 - margin.left)
-          .attr("x", 0 - (h / 2))
-          .attr("dy", "1em")
-          .attr("class", "axislabel")
-          .style("text-anchor", "middle")
-          .text("deaths per mio");
-
-      // populate with data
-      let entered = svg.selectAll(".datapoint")
-        .data(data)
-        .enter();
-      
-      entered.append("circle")
-        .attr("class", "datapoint")
-        .attr("cx", function (d) { return x(d.values[0][xVar]); })
-        .attr("cy", function (d) { return y(d.values[0][yVar]); })
-        .style("stroke", "#000")
-        .style("stroke-width", 1);
-
-      entered.append("text")
-        .attr("class", "label");
-
-      return [svg, x, y];
-    }
-    
-    /**
-     * function to update a generic bubble
-     */
-    function updateBubble(svgObj, val) {
-      let xVar = svgObj.xVar;
-      let yVar = svgObj.yVar;
-      let rVar = svgObj.rVar || yVar;
-      let fVar = svgObj.fVar || rVar;
-      let svg = svgObj.svg;
-
-      let x = svgObj.x;
-      let y = svgObj.y;
-      let fRange = svgObj.fRange;
-      let fInterp = svgObj.fInterp || redInterp;
-
-      svg.selectAll(".datapoint")
-          .transition()
-          .duration(100)
-            .ease(d3.easeLinear)
-            .attr("cx", function (d) {
-              let val_ = calculateIndex(val, d);
-              return x(d.values[val_][xVar]); })
-            .attr("cy", function (d) {
-              let val_ = calculateIndex(val, d);
-              return y(d.values[val_][yVar]);
-            })
-            .attr("r", function(d) {
-              let val_ = calculateIndex(val, d);
-              return d.values[val_][rVar]**0.5/50;
-            })
-            .attr("fill", function(d) {
-              let val_ = calculateIndex(val, d);
-              var i = d.values[val_][fVar];
-              return fInterp(fRange(i))});
-      
-      svg.selectAll(".label")
-          .transition()
-          .duration(100)
-            .ease(d3.easeLinear)
-            .attr("dx", function(d){
-              let val_ = calculateIndex(val, d);
-              return x(d.values[val_][xVar])+d.values[val_][rVar]**0.5/50+2;})
-            .attr("dy", function(d){
-              let val_ = calculateIndex(val, d);
-              return y(d.values[val_][yVar])+2.5;})
-            .text(function(d){
-              let val_ = calculateIndex(val, d);
-              if (labels.includes(d.key)) {
-                return d.key;
-              } else {
-                return ""
-              }
-            });
-
-    }
-    
-    /**
-     * main update function
-     */
-    function update(val) {
-      for (let i=0; i<bubbleSvgs.length; i++) {
-        updateBubble(bubbleSvgs[i], val);
-      }
-
-      d3.select("#date").text(function() {
-        return d3.interpolateDate(startDate, endDate)(dateRange(val)).toDateString()});
-    }
-    
-    function makeSlider(sliderId, totalDays) {
-      var slider = d3Slider.sliderHorizontal()
-        .domain([0, totalDays])
-        .width(500)
-        .tickFormat(d3.format('1'))
-        .ticks(totalDays/20)
-        .default(0)
-        .on('onchange', val => {
-          update(val)
-        });
-
-      d3.select(sliderId)
-        .append("svg")
-        .attr("width", 700)
-        .attr("height", 60)
-        .append('g')
-        .attr("transform", "translate(10,10)")
-        .call(slider);
-
-      return slider;
-    }
-
-    /**
-     * simple end of array helper
-     */
-    function calculateIndex(i, d) {
-      let i_ = Math.round(i);
-      // this means the country hasn't recorded yet
-      if (d.startDelta > i_) return 0;
-      if (i_ > d.values.length-1) {i_=d.values.length-1;}
-      return i_;
-    }
-    
-    // load
-    d3.csv(url).then(function(raw) {
-
-      [data, bounds] = processRawData(raw);
-      
-      startDate = bounds.start_date;
-      endDate = bounds.end_date;
-      totalDays = d3.timeDay.count(startDate, endDate);
-      
-      tdpmRange = d3.scaleLinear()
-        .domain([0, bounds.total_deaths_per_million])
-        .range([0, 1]);
-
-      dateRange = d3.scaleLinear()
-        .domain([0, totalDays])
-        .range([0, 1]);
-
-      deathRange = d3.scaleLinear()
-        .domain([0, bounds.total_deaths])
-        .range([0, 1]);
-
-      d3.select(dateId)
-        .append("text")
-        .text(startDate.toDateString());
-
-      slider = makeSlider(sliderId, totalDays);
-
-      // make graphs
-      [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
-                                              "total_deaths_per_million",
-                                              tcvdId, data, width, height, margin, bounds);
-      [svg_ncvd, x_ncvd, y_ncvd] = makeBubble("new_cases_smoothed_per_million",
-                                              "new_deaths_smoothed_per_million",
-                                              ncvdId, data, width, height, margin, bounds);
-      
-      // register plots for updates
-      bubbleSvgs.push({"svg":svg_tcvd,
-                       "x": x_tcvd,
-                       "y": y_tcvd,
-                       "rVar": "total_deaths",
-                       "fRange": deathRange,
-                       "xVar": "total_cases_per_million",
-                       "yVar": "total_deaths_per_million"});
-      bubbleSvgs.push({"svg":svg_ncvd,
-                       "x": x_ncvd,
-                       "y": y_ncvd,
-                       "rVar": "total_deaths",
-                       "fRange": deathRange,
-                       "fInterp": blueInterp,
-                       "xVar": "new_cases_smoothed_per_million",
-                       "yVar": "new_deaths_smoothed_per_million"});
+    // remove the world data
+    data = data.filter(function (d) {
+      return d.key !== "World"
     });
-  </script>
+
+    // work out the highest number of cases/deaths/...
+    for (let i = 0; i < data.length; i++) {
+      let vals = data[i].values;
+      let tcpm_ = parseFloat(vals[vals.length - 1].total_cases_per_million);
+      let tdpm_ = parseFloat(vals[vals.length - 1].total_deaths_per_million);
+      let td_ = parseFloat(vals[vals.length - 1].total_deaths);
+      let ncs_ = parseFloat(vals[vals.length - 1].new_cases_smoothed_per_million);
+      let nds_ = parseFloat(vals[vals.length - 1].new_deaths_smoothed_per_million);
+
+      if (tcpm_ > tcpm) tcpm = tcpm_;
+      if (tdpm_ > tdpm) tdpm = tdpm_;
+      if (td_ > td) td = td_;
+      if (ncs_ > ncs) ncs = ncs_;
+      if (nds_ > nds) nds = nds_;
+
+      // each country needs a delta for 'interpolation' purposes
+      // i.e. if the country wasn't recording from the start of
+      // the pandemic, then this is a convenience variable so we can
+      // plot by index, not by date.
+      data[i]['startDelta'] = d3.timeDay.count(startDate, vals[0].date_);
+    }
+
+    bounds.total_cases_per_million = tcpm;
+    bounds.total_deaths_per_million = tdpm;
+    bounds.start_date = startDate;
+    bounds.end_date = endDate;
+    bounds.total_deaths = td;
+    bounds.new_cases_smoothed_per_million = ncs;
+    bounds.new_deaths_smoothed_per_million = nds;
+    return [data, bounds];
+  }
+
+  /**
+   * generic initialise bubble plot
+   */
+  function makeBubble(xVar, yVar, svgId, data, width, height, margin, bounds) {
+    var svg = d3.select(svgId)
+      .append("svg")
+      .attr("viewBox", `0 0 ` + width + ` ` + height)
+      .append("g")
+      .attr("transform",
+        "translate(" + margin.left + "," + margin.top + ")");
+
+    var w = width - margin.left - margin.right;
+    var h = height - margin.bottom - margin.top;
+
+    // axes
+    var x = d3.scaleLinear()
+      .domain([0, bounds[xVar]])
+      .range([10, w - 10]);
+
+    var y = d3.scaleLinear()
+      .domain([0, bounds[yVar]])
+      .range([h - 10, 10]); // bit of margin
+
+    // x axis group
+    svg.append("g")
+      .attr("class", "xaxis")
+      .attr("transform", "translate(0," + h + ")")
+      .call(d3.axisBottom(x)
+        .tickFormat(d3.format(".2s")));
+
+    // text label for the x axis
+    svg.append("text")
+      .attr("transform",
+        "translate(" + (w / 2) + " ," +
+        (h + margin.top + 50) + ")")
+      .style("text-anchor", "middle")
+      .attr("class", "axislabel")
+      .text(xVar.replace("_smoothed", "").replace(/_/g, " "));
+
+    // y axis group
+    svg.append("g")
+      .attr("class", "yaxis")
+      .call(d3.axisLeft(y)
+        .tickFormat(d3.format(".2s")));
+
+    // text label for the y axis
+    svg.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 0 - margin.left)
+      .attr("x", 0 - (h / 2))
+      .attr("dy", "1em")
+      .attr("class", "axislabel")
+      .style("text-anchor", "middle")
+      .text(yVar.replace("_smoothed", "").replace(/_/g, " "));
+
+    // populate with data
+    let entered = svg.selectAll(".datapoint")
+      .data(data)
+      .enter();
+
+    entered.append("circle")
+      .attr("class", "datapoint")
+      .attr("cx", function (d) {
+        return x(d.values[0][xVar]);
+      })
+      .attr("cy", function (d) {
+        return y(d.values[0][yVar]);
+      })
+      .style("stroke", "#000")
+      .style("stroke-width", 1);
+
+    entered.append("text")
+      .attr("class", "label");
+
+    return [svg, x, y];
+  }
+
+  /**
+   * function to update a generic bubble
+   */
+  function updateBubble(svgObj, val) {
+    let xVar = svgObj.xVar;
+    let yVar = svgObj.yVar;
+    let rVar = svgObj.rVar || yVar;
+    let fVar = svgObj.fVar || rVar;
+    let svg = svgObj.svg;
+
+    let x = svgObj.x;
+    let y = svgObj.y;
+    let fRange = svgObj.fRange;
+    let fInterp = svgObj.fInterp || redInterp;
+
+    svg.selectAll(".datapoint")
+      .transition()
+      .duration(100)
+      .ease(d3.easeLinear)
+      .attr("cx", function (d) {
+        let val_ = calculateIndex(val, d);
+        return x(d.values[val_][xVar]);
+      })
+      .attr("cy", function (d) {
+        let val_ = calculateIndex(val, d);
+        return y(d.values[val_][yVar]);
+      })
+      .attr("r", function (d) {
+        let val_ = calculateIndex(val, d);
+        return d.values[val_][rVar] ** 0.5 / 50;
+      })
+      .attr("fill", function (d) {
+        let val_ = calculateIndex(val, d);
+        var i = d.values[val_][fVar];
+        return fInterp(fRange(i))
+      });
+
+    svg.selectAll(".label")
+      .transition()
+      .duration(100)
+      .ease(d3.easeLinear)
+      .attr("dx", function (d) {
+        let val_ = calculateIndex(val, d);
+        return x(d.values[val_][xVar]) + d.values[val_][rVar] ** 0.5 / 50 + 2;
+      })
+      .attr("dy", function (d) {
+        let val_ = calculateIndex(val, d);
+        return y(d.values[val_][yVar]) + 2.5;
+      })
+      .text(function (d) {
+        let val_ = calculateIndex(val, d);
+        if (labels.includes(d.key)) {
+          return d.key;
+        } else {
+          return ""
+        }
+      });
+
+  }
+
+  /**
+   * main update function
+   */
+  function update(val) {
+    for (let i = 0; i < bubbleSvgs.length; i++) {
+      updateBubble(bubbleSvgs[i], val);
+    }
+
+    d3.select("#date").text(function () {
+      return d3.interpolateDate(startDate, endDate)(dateRange(val)).toDateString()
+    });
+  }
+
+  function makeSlider(sliderId, totalDays) {
+    var slider = d3Slider.sliderHorizontal()
+      .domain([0, totalDays])
+      .width(500)
+      .tickFormat(d3.format('1'))
+      .ticks(totalDays / 20)
+      .default(0)
+      .on('onchange', val => {
+        update(val)
+      });
+
+    d3.select(sliderId)
+      .append("svg")
+      .attr("width", 700)
+      .attr("height", 60)
+      .append('g')
+      .attr("transform", "translate(10,10)")
+      .call(slider);
+
+    return slider;
+  }
+
+  function playFn() {
+    if (sliderPlaying) {
+      sliderPlaying = false;
+      d3.select("#play").text(">");
+    } else {
+      sliderPlaying = true;
+      d3.select("#play").text("||");
+      play();
+    }
+  }
+
+  function play() {
+    if (sliderPlaying === false) {
+      return;
+    }
+
+    // clicked and want to play
+    var startValue = slider.value();
+    var endValue = slider.domain()[1];
+    d3.select("#play").text("||");
+
+    var newValue = startValue + 1;
+    if (newValue < endValue + 1) {
+      setTimeout(function () {
+        slider.value(newValue);
+        play();
+      }, 75);
+    } else {
+      sliderPlaying = false;
+      d3.select("#play").text(">");
+    }
+  }
+
+  /**
+   * simple end of array helper
+   */
+  function calculateIndex(i, d) {
+    let i_ = Math.round(i);
+    // this means the country hasn't recorded yet
+    if (d.startDelta > i_) return 0;
+    if (i_ > d.values.length - 1) {
+      i_ = d.values.length - 1;
+    }
+    return i_;
+  }
+
+  function clearFn() {
+    labels.length = 0;
+    val = slider.value();
+    update(val);
+  }
+
+  function addAllFn() {
+    labels.length = 0;
+    for (let i=0; i<data.length; i++) labels.push(data[i].key);
+    val = slider.value();
+    update(val);
+  }
+
+  // load (main fn)
+  d3.csv(url).then(function (raw) {
+
+    [data, bounds] = processRawData(raw);
+
+    startDate = bounds.start_date;
+    endDate = bounds.end_date;
+    totalDays = d3.timeDay.count(startDate, endDate);
+
+    tdpmRange = d3.scaleLinear()
+      .domain([0, bounds.total_deaths_per_million])
+      .range([0, 1]);
+
+    dateRange = d3.scaleLinear()
+      .domain([0, totalDays])
+      .range([0, 1]);
+
+    deathRange = d3.scaleLinear()
+      .domain([0, bounds.total_deaths])
+      .range([0, 1]);
+
+    d3.select(dateId)
+      .append("text")
+      .text(startDate.toDateString());
+
+    slider = makeSlider(sliderId, totalDays);
+
+    // append country list to drop down
+    d3.select(countryDropDownId)
+      .selectAll(".country-li")
+      .data(data)
+      .enter()
+      .append("li")
+      .attr('class', 'country-li')
+      .attr("role", "presentation")
+      .append("a")
+      .on("click", function (d) {
+        let found=false;
+        for(let i=0; i<labels.length; i++) {
+          if(labels[i]===d.key) found=true;
+        }
+        if(!found) {
+          labels.push(d.key);
+          val = slider.value();
+          update(val);
+        }
+      })
+      .text(function (d) {
+        return d.key;
+      });
+
+
+
+    // make graphs
+    [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
+      "total_deaths_per_million",
+      tcvdId, data, width, height, margin, bounds);
+    [svg_ncvd, x_ncvd, y_ncvd] = makeBubble("new_cases_smoothed_per_million",
+      "new_deaths_smoothed_per_million",
+      ncvdId, data, width, height, margin, bounds);
+
+    // register plots for updates
+    bubbleSvgs.push({
+      "svg": svg_tcvd,
+      "x": x_tcvd,
+      "y": y_tcvd,
+      "rVar": "total_deaths",
+      "fRange": deathRange,
+      "xVar": "total_cases_per_million",
+      "yVar": "total_deaths_per_million"
+    });
+    bubbleSvgs.push({
+      "svg": svg_ncvd,
+      "x": x_ncvd,
+      "y": y_ncvd,
+      "rVar": "total_deaths",
+      "fRange": deathRange,
+      "fInterp": blueInterp,
+      "xVar": "new_cases_smoothed_per_million",
+      "yVar": "new_deaths_smoothed_per_million"
+    });
+  });
+</script>
 
 </html>
