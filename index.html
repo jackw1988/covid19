@@ -2,12 +2,11 @@
 <html>
 
 <!-- WISHLIST
-  0. line plot: color countries / update on label change / add line to show today
+  0. line plot legends (+show country on hover over)
   1. COUNT FROM date (reset graphs to count from a particular date)
   2. TABLE - all labels
            - sortable by column
   3. convenient ADDING LABELS
-  4. other graph types (line plot)
   5. hover over paths on bubbles
   6. better abstraction in processRawFunction
 -->
@@ -45,6 +44,10 @@
     font-size: 36px;
   }
 
+  #main {
+    padding-top: 100px;
+  }
+
   #menu1 {
     background-color: rgb(231, 121, 121) !important;
     border-color: rgb(231, 121, 121) !important;
@@ -65,6 +68,10 @@
     max-height: 200px;
     overflow-x: hidden;
   }
+
+  #topbar {
+    background-color: white;
+  }
 </style>
 
 <!-- d3 includes -->
@@ -80,21 +87,25 @@
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"></script>
 
 <body>
-  <div id="date"></div>
-  <div class="container-fluid" id="main">
-    <div class="row">
-      <div class="col-md-8" id="slider"></div>
-      <div class="col-md-4" id="controls">
-        <button id="play" type="button" class="btn btn-primary" onClick="playFn()">></button>
-        <button id="clearButton" type="button" class="btn btn-primary" onClick="clearFn()">Clear</button>
-        <button id="addButton" type="button" class="btn btn-primary" onClick="addAllFn()">Add All</button>
-        <button class="btn btn-primary dropdown-toggle" id="menu1" type="button" data-toggle="dropdown">Add Country
-          <span class="caret"></span>
-        </button>
-        <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
-        </ul>
+  <nav class="navbar navbar-fixed-top" id="topbar">
+    <div class="container-fluid">
+      <div id="date"></div>
+      <div class="row">
+        <div class="col-md-8" id="slider"></div>
+        <div class="col-md-4" id="controls">
+          <button id="play" type="button" class="btn btn-primary" onClick="playFn()">></button>
+          <button id="clearButton" type="button" class="btn btn-primary" onClick="clearFn()">Clear</button>
+          <button id="addButton" type="button" class="btn btn-primary" onClick="addAllFn()">Add All</button>
+          <button class="btn btn-primary dropdown-toggle" id="menu1" type="button" data-toggle="dropdown">Add Country
+            <span class="caret"></span>
+          </button>
+          <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
+          </ul>
+        </div>
       </div>
     </div>
+  </nav>
+  <div class="container-fluid" id="main">
     <div class="row">
       <div class="col-md-6" id="bubbletot"></div>
       <div class="col-md-6" id="bubblenew"></div>
@@ -481,17 +492,27 @@
           .attr("stroke", function (i) {
             return data[i].color;
           })
-        .attr("d", function (i) {
+          .attr("d", function (i) {
             let d = data[i];
             let arr = d.values.filter(function (x) {
               return x[yVar] !== null &&
                 x[yVar] !== undefined &&
                 x[yVar] !== ""
             });
-            console.log(arr);
-            console.log(lineFn(arr));
             return lineFn(arr);
-        });
+          })
+          .attr("stroke-dasharray", function(i) {
+            var totalLength = this.getTotalLength();
+            return totalLength + " " + totalLength;
+          })
+          .attr("stroke-dashoffset", function(i) {
+            var totalLength = this.getTotalLength();
+            return totalLength;
+          })
+        .transition()
+          .duration(1000)
+          .ease(d3.easeLinear)
+          .attr("stroke-dashoffset", 0);
 
 
   }
@@ -698,6 +719,11 @@
       "y": y_vacc,
       "yVar": "total_vaccinations"
     });
+
+    // need to draw lines
+    let val = slider.value();
+    update(val);
+
 
   });
 </script>
