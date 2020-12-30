@@ -9,7 +9,7 @@
   3. convenient ADDING LABELS
   4. other graph types (line plot)
   5. hover over paths on bubbles
-
+  6. better abstraction in processRawFunction
 -->
 
 <head>
@@ -37,7 +37,7 @@
   .line {
     /* must remove the fill */
     fill: none;
-    stroke: #000;
+    /* stroke: black; */
     stroke-width: 1;
   }
 
@@ -72,7 +72,6 @@
 <script src="https://cdn.jsdelivr.net/npm/lodash@4.17.4/lodash.min.js"></script>
 <script src="https://unpkg.com/d3-simple-slider@0.1.2/build/d3-simple-slider.js"></script>
 
-
 <!-- jquery -->
 <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
 
@@ -102,7 +101,7 @@
     </div>
     <div class="row">
       <div class="col-md-6" id="linernum"></div>
-      <div class="col-md-6"></div>
+      <div class="col-md-6" id="totvacc"></div>
     </div>
   </div>
 </body>
@@ -110,6 +109,13 @@
 <script>
   // data location
   var url = "https://covid.ourworldindata.org/data/owid-covid-data.csv";
+
+  // colors : https://sashamaps.net/docs/resources/20-colors/
+  var colors = ['#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+    '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+    '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000',
+    '#aaffc3', '#808000', '#ffd8b1', '#000075', '#808080'
+  ];
 
   // standard plotting margins
   var margin = {
@@ -125,12 +131,14 @@
     ncvdId = "#bubblenew",
     dateId = "#date",
     rnumId = "#linernum",
+    vaccId = "#totvacc",
     countryDropDownId = "#country-drop-down",
     sliderId = "#slider";
 
   var slider;
   var bubbleSvgs = [];
-  var labels = ["United Kingdom", "Germany", "United States", "Sweden"]; // labels to include
+  var lineSvgs = [];
+  var labelIndices = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]; // join lines on this!
   var sliderPlaying = false;
 
   // data variables
@@ -163,7 +171,8 @@
       td = 0,
       ncs = 0,
       nds = 0,
-      r = 0;
+      r = 0,
+      tv = 0;
 
     // find out the start date in the data
     for (var i = 0; i < raw.length; i++) {
@@ -187,13 +196,13 @@
     data = data.filter(function (d) {
       return d.key !== "World"
     });
-    
+
     // work out the highest number of cases/deaths/...
+    // TODO abstract so that we have a dictionary of variables that governs this!
     for (let i = 0; i < data.length; i++) {
       // if this row is NOT the day after j-1 - then copy j-1
       let vals = data[i].values;
-      console.log(vals.length);
-      let l=vals.length;
+      let l = vals.length;
       for (j = 1; j < l; j++) {
         let tcpm_ = parseFloat(vals[j].total_cases_per_million);
         let tdpm_ = parseFloat(vals[j].total_deaths_per_million);
@@ -201,6 +210,7 @@
         let ncs_ = parseFloat(vals[j].new_cases_smoothed_per_million);
         let nds_ = parseFloat(vals[j].new_deaths_smoothed_per_million);
         let r_ = parseFloat(vals[j].reproduction_rate);
+        let tv_ = parseFloat(vals[j].total_vaccinations);
 
         if (tcpm_ > tcpm) tcpm = tcpm_;
         if (tdpm_ > tdpm) tdpm = tdpm_;
@@ -208,18 +218,24 @@
         if (ncs_ > ncs) ncs = ncs_;
         if (nds_ > nds) nds = nds_;
         if (r_ > r) r = r_;
+        if (tv_ > tv) tv = tv_;
 
         let d1 = vals[j - 1].date_;
         let d2 = vals[j].date_;
         let n = d3.timeDay.count(d1, d2) - 1;
-        if (n > 0) {vals.splice(j, 0, vals[j - 1]);j++}
+        if (n > 0) {
+          vals.splice(j, 0, vals[j - 1]);
+          j++
+        }
       }
-      
+
       // each country needs a delta for 'interpolation' purposes
       // i.e. if the country wasn't recording from the start of
       // the pandemic, then this is a convenience variable so we can
       // plot by index, not by date.
       data[i]['startDelta'] = d3.timeDay.count(startDate, vals[0].date_);
+      let ii = Math.floor(Math.random() * colors.length);
+      data[i]['color'] = colors[ii];
     }
 
     bounds.total_cases_per_million = tcpm;
@@ -230,6 +246,7 @@
     bounds.new_cases_smoothed_per_million = ncs;
     bounds.new_deaths_smoothed_per_million = nds;
     bounds.reproduction_rate = r;
+    bounds.total_vaccinations = tv;
     return [data, bounds];
   }
 
@@ -244,54 +261,56 @@
       .append("g")
       .attr("transform",
         "translate(" + margin.left + "," + margin.top + ")");
-    
+
     var w = width - margin.left - margin.right;
     var h = height - margin.bottom - margin.top;
 
     var x = d3.scaleTime()
-      .range([10, w-10])
+      .range([10, w - 10])
       .domain([startDate, endDate]);
     var y = d3.scaleLinear()
-      .range([h-10, 10])
-      .domain([0, clipy*bounds[yVar]]);
-
-    // define the line
-    var lineFn = d3.line()
-      .x(function (d) {
-        return x(d.date_);
-      })
-      .y(function (d) {
-        // console.log(d.date_," ",d[yVar]||0.0,y(d[yVar]||"0.0"));
-        return y(d[yVar] ||"0.0");
-      });
+      .range([h - 10, 10])
+      .domain([0, clipy * bounds[yVar]]);
 
     let data_;
     if (all) {
       data_ = data;
     } else {
-      data_ = data.filter(function (d) {
-        return labels.includes(d.key);
+      data_ = data.filter(function (d, i) {
+        return labelIndices.includes(i);
       });
     }
 
-    data_.forEach(function (d) {
-      svg.append("path")
-        .data([d.values.filter(function(x){return x[yVar] !== null && x[yVar] !== undefined && x[yVar] !== ""})])
-        .attr("class", "line")
-        .attr("d", lineFn);
-    });
-
     // add axes
     svg.append("g")
-        .attr("class", "xaxis")
-        .attr("transform", "translate(0,"+h+")")
-        .call(d3.axisBottom(x)
-                .tickFormat(d3.timeFormat("%m/%y")));
+      .attr("class", "xaxis")
+      .attr("transform", "translate(0," + h + ")")
+      .call(d3.axisBottom(x)
+        .tickFormat(d3.timeFormat("%m/%y")));
+
+    // text label for the x axis
+    svg.append("text")
+      .attr("transform",
+        "translate(" + (w / 2) + " ," +
+        (h + margin.top + 50) + ")")
+      .style("text-anchor", "middle")
+      .attr("class", "axislabel")
+      .text("date");
 
     // y axis
     svg.append("g")
       .attr("class", "yaxis")
       .call(d3.axisLeft(y));
+
+    // text label for the y axis
+    svg.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 0 - margin.left)
+      .attr("x", 0 - (h / 2))
+      .attr("dy", "1em")
+      .attr("class", "axislabel")
+      .style("text-anchor", "middle")
+      .text(yVar.replace("_smoothed", "").replace(/_/g, " "));
 
     return [svg, x, y];
   }
@@ -299,7 +318,7 @@
   /**
    * generic initialise bubble plot
    */
-  function makeBubble(xVar, yVar, svgId, data, width, height, margin, bounds, clipx=1, clipy=1) {
+  function makeBubble(xVar, yVar, svgId, data, width, height, margin, bounds, clipx = 1, clipy = 1) {
     var svg = d3.select(svgId)
       .append("svg")
       .attr("viewBox", `0 0 ` + width + ` ` + height)
@@ -312,11 +331,11 @@
 
     // axes
     var x = d3.scaleLinear()
-      .domain([0, clipx*bounds[xVar]])
+      .domain([0, clipx * bounds[xVar]])
       .range([10, w - 10]);
 
     var y = d3.scaleLinear()
-      .domain([0, clipy*bounds[yVar]])
+      .domain([0, clipy * bounds[yVar]])
       .range([h - 10, 10]); // bit of margin
 
     // x axis group
@@ -422,14 +441,58 @@
         let val_ = calculateIndex(val, d);
         return y(d.values[val_][yVar]) + 2.5;
       })
-      .text(function (d) {
+      .text(function (d, i) {
         let val_ = calculateIndex(val, d);
-        if (labels.includes(d.key)) {
+        if (labelIndices.includes(i)) {
           return d.key;
         } else {
           return ""
         }
       });
+
+  }
+
+  function updateLine(svgObj, val) {
+    let yVar = svgObj.yVar;
+    let svg = svgObj.svg;
+
+    let x = svgObj.x;
+    let y = svgObj.y;
+
+    // define the line
+    var lineFn = d3.line()
+      .x(function (d) {
+        return x(d.date_);
+      })
+      .y(function (d) {
+        return y(d[yVar] || "0.0");
+      });
+
+    svg.selectAll(".line")
+      .data(labelIndices)
+      .exit()
+        .remove();
+
+    svg.selectAll(".line")
+      .data(labelIndices)
+      .enter()
+        .append("path")
+          .attr("class", "line")
+          .attr("stroke", function (i) {
+            return data[i].color;
+          })
+        .attr("d", function (i) {
+            let d = data[i];
+            let arr = d.values.filter(function (x) {
+              return x[yVar] !== null &&
+                x[yVar] !== undefined &&
+                x[yVar] !== ""
+            });
+            console.log(arr);
+            console.log(lineFn(arr));
+            return lineFn(arr);
+        });
+
 
   }
 
@@ -439,6 +502,10 @@
   function update(val) {
     for (let i = 0; i < bubbleSvgs.length; i++) {
       updateBubble(bubbleSvgs[i], val);
+    }
+
+    for (let i = 0; i < lineSvgs.length; i++) {
+      updateLine(lineSvgs[i], val);
     }
 
     d3.select("#date").text(function () {
@@ -519,14 +586,14 @@
   }
 
   function clearFn() {
-    labels.length = 0;
+    labelIndices.length = 0;
     val = slider.value();
     update(val);
   }
 
   function addAllFn() {
-    labels.length = 0;
-    for (let i = 0; i < data.length; i++) labels.push(data[i].key);
+    labelIndices.length = 0;
+    for (let i = 0; i < data.length; i++) labelIndices.push(i);
     val = slider.value();
     update(val);
   }
@@ -567,13 +634,14 @@
       .attr('class', 'country-li')
       .attr("role", "presentation")
       .append("a")
-      .on("click", function (d) {
+      .on("click", function (d, i) {
+        // only add index if not already there
         let found = false;
-        for (let i = 0; i < labels.length; i++) {
-          if (labels[i] === d.key) found = true;
+        for (let j = 0; j < labelIndices.length; j++) {
+          if (labelIndices[j] === i) found = true;
         }
         if (!found) {
-          labels.push(d.key);
+          labelIndices.push(i);
           val = slider.value();
           update(val);
         }
@@ -591,7 +659,10 @@
       ncvdId, data, width, height, margin, bounds, 0.5, 0.5);
 
     [svg_rnum, x_rnum, y_rnum] = makeLine('reproduction_rate',
-      rnumId, data, width, height, margin, bounds,false);
+      rnumId, data, width, height, margin, bounds, false);
+
+    [svg_vacc, x_vacc, y_vacc] = makeLine('total_vaccinations',
+      vaccId, data, width, height, margin, bounds, false);
 
     // register plots for updates
     bubbleSvgs.push({
@@ -613,6 +684,21 @@
       "xVar": "new_cases_smoothed_per_million",
       "yVar": "new_deaths_smoothed_per_million"
     });
+
+    lineSvgs.push({
+      "svg": svg_rnum,
+      "x": x_rnum,
+      "y": y_rnum,
+      "yVar": "reproduction_rate"
+    });
+
+    lineSvgs.push({
+      "svg": svg_vacc,
+      "x": x_vacc,
+      "y": y_vacc,
+      "yVar": "total_vaccinations"
+    });
+
   });
 </script>
 
