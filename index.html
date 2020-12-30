@@ -1,6 +1,17 @@
 <!DOCTYPE html>
 <html>
 
+<!-- WISHLIST
+  0. line plot: color countries / update on label change / add line to show today
+  1. COUNT FROM date (reset graphs to count from a particular date)
+  2. TABLE - all labels
+           - sortable by column
+  3. convenient ADDING LABELS
+  4. other graph types (line plot)
+  5. hover over paths on bubbles
+
+-->
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" , content="width=device-width,initial-scale=1.0">
@@ -21,6 +32,13 @@
     /* font: 9px sans-serif; */
     fill: darkgray;
     font-size: 50% !important;
+  }
+
+  .line {
+    /* must remove the fill */
+    fill: none;
+    stroke: #000;
+    stroke-width: 1;
   }
 
   #date {
@@ -79,11 +97,14 @@
       </div>
     </div>
     <div class="row">
-      <div class="col-md-6" id="graph0"></div>
-      <div class="col-md-6" id="graph1"></div>
+      <div class="col-md-6" id="bubbletot"></div>
+      <div class="col-md-6" id="bubblenew"></div>
+    </div>
+    <div class="row">
+      <div class="col-md-6" id="linernum"></div>
+      <div class="col-md-6"></div>
     </div>
   </div>
-
 </body>
 
 <script>
@@ -98,17 +119,18 @@
     left: 70
   };
   var width = 480,
-      height = 380;
+    height = 380;
 
-  var tcvdId = "#graph0",
-    ncvdId = "#graph1",
+  var tcvdId = "#bubbletot",
+    ncvdId = "#bubblenew",
     dateId = "#date",
+    rnumId = "#linernum",
     countryDropDownId = "#country-drop-down",
     sliderId = "#slider";
 
   var slider;
   var bubbleSvgs = [];
-  var labels = []; // labels to include
+  var labels = ["United Kingdom", "Germany", "United States", "Sweden"]; // labels to include
   var sliderPlaying = false;
 
   // data variables
@@ -138,10 +160,12 @@
     // bounds
     let tcpm = 0,
       tdpm = 0,
-      td = 0;
-    ncs = 0;
-    nds = 0;
+      td = 0,
+      ncs = 0,
+      nds = 0,
+      r = 0;
 
+    // find out the start date in the data
     for (var i = 0; i < raw.length; i++) {
       let row = raw[i];
       let d = new Date(row.date);
@@ -163,22 +187,34 @@
     data = data.filter(function (d) {
       return d.key !== "World"
     });
-
+    
     // work out the highest number of cases/deaths/...
     for (let i = 0; i < data.length; i++) {
+      // if this row is NOT the day after j-1 - then copy j-1
       let vals = data[i].values;
-      let tcpm_ = parseFloat(vals[vals.length - 1].total_cases_per_million);
-      let tdpm_ = parseFloat(vals[vals.length - 1].total_deaths_per_million);
-      let td_ = parseFloat(vals[vals.length - 1].total_deaths);
-      let ncs_ = parseFloat(vals[vals.length - 1].new_cases_smoothed_per_million);
-      let nds_ = parseFloat(vals[vals.length - 1].new_deaths_smoothed_per_million);
+      console.log(vals.length);
+      let l=vals.length;
+      for (j = 1; j < l; j++) {
+        let tcpm_ = parseFloat(vals[j].total_cases_per_million);
+        let tdpm_ = parseFloat(vals[j].total_deaths_per_million);
+        let td_ = parseFloat(vals[j].total_deaths);
+        let ncs_ = parseFloat(vals[j].new_cases_smoothed_per_million);
+        let nds_ = parseFloat(vals[j].new_deaths_smoothed_per_million);
+        let r_ = parseFloat(vals[j].reproduction_rate);
 
-      if (tcpm_ > tcpm) tcpm = tcpm_;
-      if (tdpm_ > tdpm) tdpm = tdpm_;
-      if (td_ > td) td = td_;
-      if (ncs_ > ncs) ncs = ncs_;
-      if (nds_ > nds) nds = nds_;
+        if (tcpm_ > tcpm) tcpm = tcpm_;
+        if (tdpm_ > tdpm) tdpm = tdpm_;
+        if (td_ > td) td = td_;
+        if (ncs_ > ncs) ncs = ncs_;
+        if (nds_ > nds) nds = nds_;
+        if (r_ > r) r = r_;
 
+        let d1 = vals[j - 1].date_;
+        let d2 = vals[j].date_;
+        let n = d3.timeDay.count(d1, d2) - 1;
+        if (n > 0) {vals.splice(j, 0, vals[j - 1]);j++}
+      }
+      
       // each country needs a delta for 'interpolation' purposes
       // i.e. if the country wasn't recording from the start of
       // the pandemic, then this is a convenience variable so we can
@@ -193,13 +229,77 @@
     bounds.total_deaths = td;
     bounds.new_cases_smoothed_per_million = ncs;
     bounds.new_deaths_smoothed_per_million = nds;
+    bounds.reproduction_rate = r;
     return [data, bounds];
+  }
+
+  /**
+   * make a line plot (by default only include countries in the labels list)
+   * xVar is always date
+   */
+  function makeLine(yVar, svgId, data, width, height, margin, bounds, all = false, clipy = 1.0) {
+    var svg = d3.select(svgId)
+      .append("svg")
+      .attr("viewBox", `0 0 ` + width + ` ` + height)
+      .append("g")
+      .attr("transform",
+        "translate(" + margin.left + "," + margin.top + ")");
+    
+    var w = width - margin.left - margin.right;
+    var h = height - margin.bottom - margin.top;
+
+    var x = d3.scaleTime()
+      .range([10, w-10])
+      .domain([startDate, endDate]);
+    var y = d3.scaleLinear()
+      .range([h-10, 10])
+      .domain([0, clipy*bounds[yVar]]);
+
+    // define the line
+    var lineFn = d3.line()
+      .x(function (d) {
+        return x(d.date_);
+      })
+      .y(function (d) {
+        // console.log(d.date_," ",d[yVar]||0.0,y(d[yVar]||"0.0"));
+        return y(d[yVar] ||"0.0");
+      });
+
+    let data_;
+    if (all) {
+      data_ = data;
+    } else {
+      data_ = data.filter(function (d) {
+        return labels.includes(d.key);
+      });
+    }
+
+    data_.forEach(function (d) {
+      svg.append("path")
+        .data([d.values.filter(function(x){return x[yVar] !== null && x[yVar] !== undefined && x[yVar] !== ""})])
+        .attr("class", "line")
+        .attr("d", lineFn);
+    });
+
+    // add axes
+    svg.append("g")
+        .attr("class", "xaxis")
+        .attr("transform", "translate(0,"+h+")")
+        .call(d3.axisBottom(x)
+                .tickFormat(d3.timeFormat("%m/%y")));
+
+    // y axis
+    svg.append("g")
+      .attr("class", "yaxis")
+      .call(d3.axisLeft(y));
+
+    return [svg, x, y];
   }
 
   /**
    * generic initialise bubble plot
    */
-  function makeBubble(xVar, yVar, svgId, data, width, height, margin, bounds) {
+  function makeBubble(xVar, yVar, svgId, data, width, height, margin, bounds, clipx=1, clipy=1) {
     var svg = d3.select(svgId)
       .append("svg")
       .attr("viewBox", `0 0 ` + width + ` ` + height)
@@ -212,11 +312,11 @@
 
     // axes
     var x = d3.scaleLinear()
-      .domain([0, bounds[xVar]])
+      .domain([0, clipx*bounds[xVar]])
       .range([10, w - 10]);
 
     var y = d3.scaleLinear()
-      .domain([0, bounds[yVar]])
+      .domain([0, clipy*bounds[yVar]])
       .range([h - 10, 10]); // bit of margin
 
     // x axis group
@@ -408,6 +508,10 @@
     let i_ = Math.round(i);
     // this means the country hasn't recorded yet
     if (d.startDelta > i_) return 0;
+
+    // otherwise get the value from the array that
+    // corresponds to that day in the pandemic
+    i_ = i_ - d.startDelta;
     if (i_ > d.values.length - 1) {
       i_ = d.values.length - 1;
     }
@@ -422,7 +526,7 @@
 
   function addAllFn() {
     labels.length = 0;
-    for (let i=0; i<data.length; i++) labels.push(data[i].key);
+    for (let i = 0; i < data.length; i++) labels.push(data[i].key);
     val = slider.value();
     update(val);
   }
@@ -464,11 +568,11 @@
       .attr("role", "presentation")
       .append("a")
       .on("click", function (d) {
-        let found=false;
-        for(let i=0; i<labels.length; i++) {
-          if(labels[i]===d.key) found=true;
+        let found = false;
+        for (let i = 0; i < labels.length; i++) {
+          if (labels[i] === d.key) found = true;
         }
-        if(!found) {
+        if (!found) {
           labels.push(d.key);
           val = slider.value();
           update(val);
@@ -478,15 +582,16 @@
         return d.key;
       });
 
-
-
     // make graphs
     [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
       "total_deaths_per_million",
       tcvdId, data, width, height, margin, bounds);
     [svg_ncvd, x_ncvd, y_ncvd] = makeBubble("new_cases_smoothed_per_million",
       "new_deaths_smoothed_per_million",
-      ncvdId, data, width, height, margin, bounds);
+      ncvdId, data, width, height, margin, bounds, 0.5, 0.5);
+
+    [svg_rnum, x_rnum, y_rnum] = makeLine('reproduction_rate',
+      rnumId, data, width, height, margin, bounds,false);
 
     // register plots for updates
     bubbleSvgs.push({
