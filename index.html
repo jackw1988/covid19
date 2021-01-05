@@ -4,11 +4,13 @@
 <!-- WISHLIST
   0. line plot legends (+show country on hover over)
   1. COUNT FROM date (reset graphs to count from a particular date)
+      easy to do by subtracting totals from that date
   2. TABLE - all labels
            - sortable by column
   3. convenient ADDING LABELS
   5. hover over paths on bubbles
   6. better abstraction in processRawFunction
+  7. use the smooth variables to calculate green/red if up or down.
 -->
 
 <head>
@@ -19,6 +21,11 @@
   div {
     margin: 0;
     padding: 0;
+    overflow: visible;
+  }
+
+  svg {
+    overflow: visible !important;
   }
 
   .datapoint {
@@ -28,9 +35,13 @@
   }
 
   .label {
-    /* font: 9px sans-serif; */
     fill: darkgray;
     font-size: 50% !important;
+  }
+
+  .line-anot {
+    fill: darkgray;
+    font-size: 40% !important;
   }
 
   .line {
@@ -40,12 +51,17 @@
     stroke-width: 1;
   }
 
+  .tcell, th {
+    border: 1px solid black;
+    padding: 4px !important;
+  }
+
   #date {
     font-size: 36px;
   }
 
   #main {
-    padding-top: 100px;
+    padding-top: 140px;
   }
 
   #menu1 {
@@ -101,11 +117,16 @@
           </button>
           <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
           </ul>
+          <br>
+          Data source: <a href="https://ourworldindata.org/coronavirus">our world in data</a>.
         </div>
       </div>
     </div>
   </nav>
   <div class="container-fluid" id="main">
+    <div class="row">
+      <div class="col-md-12" id="tabid"></div>
+    </div>
     <div class="row">
       <div class="col-md-6" id="bubbletot"></div>
       <div class="col-md-6" id="bubblenew"></div>
@@ -131,9 +152,9 @@
   // standard plotting margins
   var margin = {
     top: 5,
-    right: 5,
+    right: 25,
     bottom: 70,
-    left: 70
+    left: 75
   };
   var width = 480,
     height = 380;
@@ -143,12 +164,14 @@
     dateId = "#date",
     rnumId = "#linernum",
     vaccId = "#totvacc",
+    tabId = "#tabid",
     countryDropDownId = "#country-drop-down",
     sliderId = "#slider";
 
   var slider;
   var bubbleSvgs = [];
   var lineSvgs = [];
+  var tableSvgs = [];
   var labelIndices = [180, 64, 181]; // default for now
 
   var sliderPlaying = false;
@@ -165,6 +188,13 @@
 
   var redInterp = d3.interpolateLab("white", "red");
   var blueInterp = d3.interpolateLab("white", "blue");
+
+  // default columns for table
+  var default_columns = ["location",
+                         "new_deaths",
+                         "new_cases",
+                         "total_deaths",
+                         "total_cases"];
 
   // functions
 
@@ -261,6 +291,28 @@
     bounds.total_vaccinations = tv;
     return [data, bounds];
   }
+
+  function makeTable(svgId, data, width, height, margin, columns, all = false) {
+    var svg = d3.select(svgId)
+      .append("table");
+
+    svg.append("thead").append("tr");
+
+    // use bounds to get the keys we want to plot
+    columns = columns || default_columns;
+
+    var headers = svg.select("tr").selectAll("th")
+      .data(columns)
+      .enter()
+      .append("th")
+      .text(function (d) {
+        return d.replace(/_/g, " ");
+      });
+
+    var tbody = svg.append("tbody");
+    return [svg, tbody, headers, columns];
+  }
+
 
   /**
    * make a line plot (by default only include countries in the labels list)
@@ -480,42 +532,145 @@
         return y(d[yVar] || "0.0");
       });
 
+    let filtfn = function (i) {
+      let d = data[i];
+      let v = d.values;
+      let valid = false;
+      let j = v.length - 1;
+      while (!valid && j > 0) {
+        if (d.values[j][yVar] !== null && d.values[j][yVar] !== undefined && d.values[j][yVar] !== "") {
+          valid = true;
+        }
+        j--;
+      }
+      return valid;
+    }
+
     svg.selectAll(".line")
+      .data(labelIndices.filter(filtfn))
+      .exit()
+      .remove();
+
+    svg.selectAll(".line-anot")
+      .data(labelIndices.filter(filtfn))
+      .exit()
+      .remove();
+
+    svg.selectAll(".line")
+      .data(labelIndices.filter(filtfn))
+      .enter()
+      .append("path")
+      .attr("class", "line")
+      .attr("stroke", function (i) {
+        return data[i].color;
+      })
+      .attr("d", function (i) {
+        let d = data[i];
+        let arr = d.values.filter(function (x) {
+          return x[yVar] !== null &&
+            x[yVar] !== undefined &&
+            x[yVar] !== ""
+        });
+        return lineFn(arr);
+      })
+      .attr("stroke-dasharray", function (i) {
+        var totalLength = this.getTotalLength();
+        return totalLength + " " + totalLength;
+      })
+      .attr("stroke-dashoffset", function (i) {
+        var totalLength = this.getTotalLength();
+        return totalLength;
+      })
+      .transition()
+      .duration(1000)
+      .ease(d3.easeLinear)
+      .attr("stroke-dashoffset", 0);
+
+    svg.selectAll(".line-anot")
+      .data(labelIndices.filter(filtfn))
+      .enter()
+      .append("text")
+      .attr("class", "line-anot")
+      .style("opacity", 0.0)
+      .attr("x", function (i) {
+        let d = data[i];
+        let v = d.values;
+        let stillSearching = true;
+        let j = v.length;
+        while (stillSearching && j > 0) {
+          j--;
+          if (v[j][yVar] !== null && v[j][yVar] !== undefined && v[j][yVar] !== "") {
+            stillSearching = false;
+          }
+        }
+        let vend = v[j];
+        return x(vend.date_) + 2.5;
+      })
+      .attr("y", function (i) {
+        let d = data[i];
+        let v = d.values;
+        let stillSearching = true;
+        let j = v.length;
+        while (stillSearching && j > 0) {
+          j--;
+          if (v[j][yVar] !== null && v[j][yVar] !== undefined && v[j][yVar] !== "") {
+            stillSearching = false;
+          }
+        }
+        let vend = v[j];
+        return y(vend[yVar]);
+      })
+      .text(function (i) {
+        return data[i].key
+      })
+      .attr("text-anchor", "left")
+      .style("alignment-baseline", "middle")
+      .transition()
+      .delay(1000)
+      .duration(500)
+      .ease(d3.easeLinear)
+      .style("opacity", 1.0);
+  }
+
+  function updateTable(svgObj, val) {
+    let svg = svgObj.svg;
+    let tbody = svgObj.tbody;
+    let columns = svgObj.columns;
+    let headers = svgObj.headers;
+
+    // use bounds to get the keys we want to plot
+    columns = columns || default_columns;
+
+    tbody.select("tr").selectAll(".tcell")
       .data(labelIndices)
       .exit()
-        .remove();
+      .remove();
 
-    svg.selectAll(".line")
+    tbody.selectAll(".trow").remove();
+      // .data(labelIndices)
+      // .exit()
+      // .remove();
+
+    var rows = tbody.selectAll(".trow")
       .data(labelIndices)
       .enter()
-        .append("path")
-          .attr("class", "line")
-          .attr("stroke", function (i) {
-            return data[i].color;
-          })
-          .attr("d", function (i) {
-            let d = data[i];
-            let arr = d.values.filter(function (x) {
-              return x[yVar] !== null &&
-                x[yVar] !== undefined &&
-                x[yVar] !== ""
-            });
-            return lineFn(arr);
-          })
-          .attr("stroke-dasharray", function(i) {
-            var totalLength = this.getTotalLength();
-            return totalLength + " " + totalLength;
-          })
-          .attr("stroke-dashoffset", function(i) {
-            var totalLength = this.getTotalLength();
-            return totalLength;
-          })
-        .transition()
-          .duration(1000)
-          .ease(d3.easeLinear)
-          .attr("stroke-dashoffset", 0);
+        .append("tr")
+        .attr("class", "trow");
 
-
+    var cells = rows.selectAll(".tcell")
+      .data(function (i) {
+        let val_ = calculateIndex(val, data[i]);
+        let d = data[i].values[val_];
+        retn_data = [];
+        for (let j=0; j<columns.length; j++) {
+          retn_data.push(d[columns[j]]);
+        }
+        return retn_data;
+      })
+      .enter()
+        .append("td")
+        .attr("class", "tcell")
+        .html(function (d, i) {return d;});
   }
 
   /**
@@ -530,6 +685,10 @@
       updateLine(lineSvgs[i], val);
     }
 
+    for (let i = 0; i < tableSvgs.length; i++) {
+      updateTable(tableSvgs[i], val);
+    }
+
     d3.select("#date").text(function () {
       return d3.interpolateDate(startDate, endDate)(dateRange(val)).toDateString()
     });
@@ -538,7 +697,7 @@
   function makeSlider(sliderId, totalDays) {
     var slider = d3Slider.sliderHorizontal()
       .domain([0, totalDays])
-      .width(500)
+      .width(400)
       .tickFormat(d3.format('1'))
       .ticks(totalDays / 20)
       .default(0)
@@ -548,7 +707,7 @@
 
     d3.select(sliderId)
       .append("svg")
-      .attr("width", 700)
+      .attr("width", 500)
       .attr("height", 60)
       .append('g')
       .attr("transform", "translate(10,10)")
@@ -672,6 +831,9 @@
         return d.key;
       });
 
+    // make table
+    [svg_tab, tbody, headers, columns] = makeTable(tabId, data, width, height, margin);
+
     // make graphs
     [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
       "total_deaths_per_million",
@@ -685,6 +847,14 @@
 
     [svg_vacc, x_vacc, y_vacc] = makeLine('total_vaccinations',
       vaccId, data, width, height, margin, bounds, false);
+
+    // register tables for updates
+    tableSvgs.push({
+      "svg": svg_tab,
+      "tbody": tbody,
+      "headers": headers,
+      "columns": columns
+    });
 
     // register plots for updates
     bubbleSvgs.push({
@@ -713,7 +883,6 @@
       "y": y_rnum,
       "yVar": "reproduction_rate"
     });
-
     lineSvgs.push({
       "svg": svg_vacc,
       "x": x_vacc,
@@ -724,8 +893,6 @@
     // need to draw lines
     let val = slider.value();
     update(val);
-
-
   });
 </script>
 
