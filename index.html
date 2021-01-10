@@ -9,8 +9,7 @@
            - sortable by column
   3. convenient ADDING LABELS
   5. hover over paths on bubbles
-  6. better abstraction in processRawFunction
-  7. use the smooth variables to calculate green/red if up or down.
+  6. use the smooth variables to calculate green/red if up or down.
 -->
 
 <head>
@@ -137,6 +136,10 @@
       <div class="col-md-6" id="bubblenew"></div>
     </div>
     <div class="row">
+      <div class="col-md-6" id="linenewcasepm"></div>
+      <div class="col-md-6" id="linenewdeathpm"></div>
+    </div>
+    <div class="row">
       <div class="col-md-6" id="linenewcase"></div>
       <div class="col-md-6" id="linenewdeath"></div>
     </div>
@@ -174,7 +177,9 @@
     rnumId = "#linernum",
     vaccId = "#totvacc",
     ncsId = "#linenewcase",
+    ncspmId = "#linenewcasepm",
     ndsId = "#linenewdeath",
+    ndspmId = "#linenewdeathpm",
     tabId = "#tabid",
     countryDropDownId = "#country-drop-down",
     sliderId = "#slider";
@@ -197,7 +202,9 @@
   var svg_tcvd, // total cases v deaths
     svg_ncvd, // new cases v deaths
     svg_ncs, // new cases smoothed
-    svg_nds; // new deaths smoothed
+    svg_ncspm,
+    svg_nds, // new deaths smoothed
+    svg_ndspm;
 
   var redInterp = d3.interpolateLab("white", "red");
   var blueInterp = d3.interpolateLab("white", "blue");
@@ -859,10 +866,12 @@
     // make graphs
     [svg_ncs, x_ncs, y_ncs] = makeLine('new_cases_smoothed',
       ncsId, data, width, height, margin, bounds, false);
-
+    [svg_ncspm, x_ncspm, y_ncspm] = makeLine('new_cases_smoothed_per_million',
+      ncspmId, data, width, height, margin, bounds, false, 0.6);
     [svg_nds, x_nds, y_nds] = makeLine('new_deaths_smoothed',
       ndsId, data, width, height, margin, bounds, false);
-
+    [svg_ndspm, x_ndspm, y_ndspm] = makeLine('new_deaths_smoothed_per_million',
+      ndspmId, data, width, height, margin, bounds, false);
     [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
       "total_deaths_per_million",
       tcvdId, data, width, height, margin, bounds);
@@ -912,10 +921,22 @@
       "yVar": "new_cases_smoothed"
     });
     lineSvgs.push({
+      "svg": svg_ncspm,
+      "x": x_ncspm,
+      "y": y_ncspm,
+      "yVar": "new_cases_smoothed_per_million"
+    });
+    lineSvgs.push({
       "svg": svg_nds,
       "x": x_nds,
       "y": y_nds,
       "yVar": "new_deaths_smoothed"
+    });
+    lineSvgs.push({
+      "svg": svg_ndspm,
+      "x": x_ndspm,
+      "y": y_ndspm,
+      "yVar": "new_deaths_smoothed_per_million"
     });
     lineSvgs.push({
       "svg": svg_rnum,
