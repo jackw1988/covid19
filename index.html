@@ -23,6 +23,12 @@
     overflow: visible;
   }
 
+  .tooltip {
+    background-color: floralwhite;
+    border-radius: 5px;
+    padding: 5px
+  }
+
   svg {
     overflow: visible !important;
   }
@@ -154,8 +160,14 @@
       <div class="col-md-6" id="totvacc"></div>
     </div>
     <div class="row" style="padding-left: 10px;">
-      <p>Line colours are randomly generated, if difficult to see then refresh page. To add a country to the table and plots, choose from the dropdown. The default table are nations experiencing different pandemics. Apart from being British, I have no motivation for a particular default. I hope to improve this display.</p> 
-      <p>Data is taken from source above, no modifications have been made and the accuracy of the numbers is not verified - use at own risk. Plots use the smoothed values reported, so will not match exactly to daily reported figures. Data is naturally reported at different times by different nations, therefore the concept of daily reported figures is a bit loose. Consequently, the daily figures may not be exactly what you expect (either still be yesterdays or not yet reported). Trends are much more important than the exact daily figure.</p>
+      <p>Line colours are randomly generated, if difficult to see then refresh page. To add a country to the table and
+        plots, choose from the dropdown. The default table are nations experiencing different pandemics. Apart from
+        being British, I have no motivation for a particular default. I hope to improve this display.</p>
+      <p>Data is taken from source above, no modifications have been made and the accuracy of the numbers is not
+        verified - use at own risk. Plots use the smoothed values reported, so will not match exactly to daily reported
+        figures. Data is naturally reported at different times by different nations, therefore the concept of daily
+        reported figures is a bit loose. Consequently, the daily figures may not be exactly what you expect (either
+        still be yesterdays or not yet reported). Trends are much more important than the exact daily figure.</p>
     </div>
   </div>
 </body>
@@ -273,7 +285,7 @@
       return d.key !== "World"
     });
 
-    for (let ci=0; ci<columns.length; ci++) {
+    for (let ci = 0; ci < columns.length; ci++) {
       bounds[columns[ci]] = 0;
     }
 
@@ -284,7 +296,7 @@
       let vals = data[i].values;
       let l = vals.length;
       for (j = 1; j < l; j++) {
-        for(let ci=0; ci<columns.length; ci++) {
+        for (let ci = 0; ci < columns.length; ci++) {
           let cval_ = parseFloat(vals[j][columns[ci]]);
           if (cval_ > bounds[columns[ci]]) bounds[columns[ci]] = cval_;
         }
@@ -396,13 +408,13 @@
       .style("text-anchor", "middle")
       .text(yVar.replace("_smoothed", "").replace(/_/g, " "));
 
-    let interper=d3.interpolateDate(startDate, endDate);
+    let interper = d3.interpolateDate(startDate, endDate);
     svg.append("line")
       .attr("class", "date-line")
       .attr("x1", x(interper(dateRange(slider.value()))))
       .attr("y1", y(0))
       .attr("x2", x(interper(dateRange(slider.value()))))
-      .attr("y2", y(clipy*bounds[yVar])); 
+      .attr("y2", y(clipy * bounds[yVar]));
 
     return [svg, x, y];
   }
@@ -467,6 +479,11 @@
       .data(data)
       .enter();
 
+    // Define the div for the tooltip
+    var tooldiv = d3.select("body").append("div")
+      .attr("class", "tooltip")
+      .style("opacity", 0);
+
     entered.append("circle")
       .attr("class", "datapoint")
       .attr("cx", function (d) {
@@ -477,16 +494,35 @@
       })
       .style("stroke", "#000")
       .style("stroke-width", 1)
-      .on("click", function(d,i) {
+      .on("click", function (d, i) {
         let index = labelIndices.indexOf(i);
-        console.log(index,i);
-        if(index>0) {
-          labelIndices.splice(index,1);
+        console.log(index, i);
+        if (index > 0) {
+          labelIndices.splice(index, 1);
         } else {
-          labelIndices.push(i);          
+          labelIndices.push(i);
         }
         val = slider.value();
         update(val);
+      })
+      .on("mouseover", function (d) {
+        let i=Math.round(slider.value());
+        let val = calculateIndex(i, d)
+        let row = d.values[val];
+        tooldiv.transition()
+          .duration(200)
+          .style("opacity", .9);
+        tooldiv.html("<strong>"+d.key+"</strong><br>"+
+                      "new cases: "+Math.round(row["new_cases"])+
+                      "<br>new deaths: "+Math.round(row["new_deaths"]))
+          .style("left", (d3.event.pageX+14) + "px")
+          .style("top", (d3.event.pageY - 14) + "px");
+      })
+      .on("mouseout", function (d) {
+        tooldiv.transition()
+          .delay(1000)
+          .duration(200)
+          .style("opacity", 0);
       });
 
     entered.append("text")
@@ -670,7 +706,7 @@
       .ease(d3.easeLinear)
       .style("opacity", 1.0);
 
-    let interper=d3.interpolateDate(startDate, endDate);
+    let interper = d3.interpolateDate(startDate, endDate);
     svg.selectAll('.date-line')
       .attr("x1", x(interper(dateRange(val))))
       .attr("x2", x(interper(dateRange(val))))
