@@ -43,6 +43,12 @@
     font-size: 40% !important;
   }
 
+  .date-line {
+    stroke: lightgray;
+    stroke-width: 1;
+  }
+
+
   .line {
     /* must remove the fill */
     fill: none;
@@ -390,6 +396,14 @@
       .style("text-anchor", "middle")
       .text(yVar.replace("_smoothed", "").replace(/_/g, " "));
 
+    let interper=d3.interpolateDate(startDate, endDate);
+    svg.append("line")
+      .attr("class", "date-line")
+      .attr("x1", x(interper(dateRange(slider.value()))))
+      .attr("y1", y(0))
+      .attr("x2", x(interper(dateRange(slider.value()))))
+      .attr("y2", y(clipy*bounds[yVar])); 
+
     return [svg, x, y];
   }
 
@@ -644,6 +658,11 @@
       .duration(500)
       .ease(d3.easeLinear)
       .style("opacity", 1.0);
+
+    let interper=d3.interpolateDate(startDate, endDate);
+    svg.selectAll('.date-line')
+      .attr("x1", x(interper(dateRange(val))))
+      .attr("x2", x(interper(dateRange(val))))
   }
 
   function updateTable(svgObj, val) {
