@@ -122,7 +122,7 @@
           </button>
 
           <br>
-          Data source: <a href="https://ourworldindata.org/coronavirus">our world in data</a>.
+          Data source: <a href="https://ourworldindata.org/coronavirus">our world in data</a>. See notes below.
         </div>
       </div>
     </div>
@@ -146,6 +146,10 @@
     <div class="row">
       <div class="col-md-6" id="linernum"></div>
       <div class="col-md-6" id="totvacc"></div>
+    </div>
+    <div class="row" style="padding-left: 10px;">
+      <p>Line colours are randomly generated, if difficult to see then refresh page. To add a country to the table and plots, choose from the dropdown. The default table are nations experiencing different pandemics. Apart from being British, I have no motivation for a particular default. I hope to improve this display.</p> 
+      <p>Data is taken from source above, no modifications have been made and the accuracy of the numbers is not verified - use at own risk. Plots use the smoothed values reported, so will not match exactly to daily reported figures. Data is naturally reported at different times by different nations, therefore the concept of daily reported figures is a bit loose. Consequently, the daily figures may not be exactly what you expect (either still be yesterdays or not yet reported). Trends are much more important than the exact daily figure.</p>
     </div>
   </div>
 </body>
@@ -678,6 +682,7 @@
       .append("td")
       .attr("class", "tcell")
       .html(function (d, i) {
+        if (d === "") return "";
         let intVal = Math.round(d);
         return isNaN(intVal) ? d : intVal
       });
@@ -871,7 +876,8 @@
     [svg_nds, x_nds, y_nds] = makeLine('new_deaths_smoothed',
       ndsId, data, width, height, margin, bounds, false);
     [svg_ndspm, x_ndspm, y_ndspm] = makeLine('new_deaths_smoothed_per_million',
-      ndspmId, data, width, height, margin, bounds, false);
+      ndspmId, data, width, height, margin, bounds, false, 0.5);
+
     [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
       "total_deaths_per_million",
       tcvdId, data, width, height, margin, bounds);
