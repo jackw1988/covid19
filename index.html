@@ -497,7 +497,7 @@
       .on("click", function (d, i) {
         let index = labelIndices.indexOf(i);
         console.log(index, i);
-        if (index > 0) {
+        if (index > -1) {
           labelIndices.splice(index, 1);
         } else {
           labelIndices.push(i);
