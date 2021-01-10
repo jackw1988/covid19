@@ -5,11 +5,11 @@
   0. line plot legends (+show country on hover over)
   1. COUNT FROM date (reset graphs to count from a particular date)
       easy to do by subtracting totals from that date
-  2. TABLE - all labels
-           - sortable by column
+  2. TABLE  - sortable by column
   3. convenient ADDING LABELS
   5. hover over paths on bubbles
   6. use the smooth variables to calculate green/red if up or down.
+  7. dragging slider on phone doesn't play nice
 -->
 
 <head>
@@ -476,7 +476,18 @@
         return y(d.values[0][yVar]);
       })
       .style("stroke", "#000")
-      .style("stroke-width", 1);
+      .style("stroke-width", 1)
+      .on("click", function(d,i) {
+        let index = labelIndices.indexOf(i);
+        console.log(index,i);
+        if(index>0) {
+          labelIndices.splice(index,1);
+        } else {
+          labelIndices.push(i);          
+        }
+        val = slider.value();
+        update(val);
+      });
 
     entered.append("text")
       .attr("class", "label");
