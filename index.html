@@ -118,8 +118,9 @@
           </button>
           <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
           </ul>
-          <button id="start" type="button" class="btn btn-primary" onClick="skipTo(0)"><<</button>
-          <button id="end" type="button" class="btn btn-primary" onClick="skipToEnd()">>></button>
+          <button id="start" type="button" class="btn btn-primary" onClick="skipTo(0)">
+            <<</button> <button id="end" type="button" class="btn btn-primary" onClick="skipToEnd()">>>
+          </button>
 
           <br>
           Data source: <a href="https://ourworldindata.org/coronavirus">our world in data</a>.
@@ -195,11 +196,22 @@
   // svg & d3 variables
   var svg_tcvd, // total cases v deaths
     svg_ncvd, // new cases v deaths
-    svg_ncs,  // new cases smoothed
-    svg_nds;  // new deaths smoothed
+    svg_ncs, // new cases smoothed
+    svg_nds; // new deaths smoothed
 
   var redInterp = d3.interpolateLab("white", "red");
   var blueInterp = d3.interpolateLab("white", "blue");
+
+  var columns = ["total_cases_per_million",
+    "total_deaths_per_million",
+    "total_deaths",
+    "new_cases_smoothed_per_million",
+    "new_deaths_smoothed_per_million",
+    "new_cases_smoothed",
+    "new_deaths_smoothed",
+    "reproduction_rate",
+    "total_vaccinations",
+  ];
 
   // default columns for table
   var default_columns = ["location",
@@ -216,20 +228,10 @@
    * calculate startDate, endDate (just today!),
    * 
    */
-  function processRawData(raw) {
+  function processRawData(raw, columns) {
     let startDate = new Date;
     let endDate = new Date; // today
-
-    // bounds
-    let tcpm = 0,
-      tdpm = 0,
-      td = 0,
-      ncspm = 0,
-      ndspm = 0,
-      ncs = 0,
-      nds = 0,
-      r = 0,
-      tv = 0;
+    let bounds = {};
 
     // find out the start date in the data
     for (var i = 0; i < raw.length; i++) {
@@ -254,6 +256,10 @@
       return d.key !== "World"
     });
 
+    for (let ci=0; ci<columns.length; ci++) {
+      bounds[columns[ci]] = 0;
+    }
+
     // work out the highest number of cases/deaths/...
     // TODO abstract so that we have a dictionary of variables that governs this!
     for (let i = 0; i < data.length; i++) {
@@ -261,25 +267,10 @@
       let vals = data[i].values;
       let l = vals.length;
       for (j = 1; j < l; j++) {
-        let tcpm_ = parseFloat(vals[j].total_cases_per_million);
-        let tdpm_ = parseFloat(vals[j].total_deaths_per_million);
-        let td_ = parseFloat(vals[j].total_deaths);
-        let ncspm_ = parseFloat(vals[j].new_cases_smoothed_per_million);
-        let ndspm_ = parseFloat(vals[j].new_deaths_smoothed_per_million);
-        let ncs_ = parseFloat(vals[j].new_cases_smoothed);
-        let nds_ = parseFloat(vals[j].new_deaths_smoothed);
-        let r_ = parseFloat(vals[j].reproduction_rate);
-        let tv_ = parseFloat(vals[j].total_vaccinations);
-
-        if (tcpm_ > tcpm) tcpm = tcpm_;
-        if (tdpm_ > tdpm) tdpm = tdpm_;
-        if (td_ > td) td = td_;
-        if (ncspm_ > ncspm) ncspm = ncspm_;
-        if (ndspm_ > ndspm) ndspm = ndspm_;
-        if (ncs_ > ncs) ncs = ncs_;
-        if (nds_ > nds) nds = nds_;
-        if (r_ > r) r = r_;
-        if (tv_ > tv) tv = tv_;
+        for(let ci=0; ci<columns.length; ci++) {
+          let cval_ = parseFloat(vals[j][columns[ci]]);
+          if (cval_ > bounds[columns[ci]]) bounds[columns[ci]] = cval_;
+        }
 
         let d1 = vals[j - 1].date_;
         let d2 = vals[j].date_;
@@ -299,17 +290,8 @@
       data[i]['color'] = colors[ii];
     }
 
-    bounds.total_cases_per_million = tcpm;
-    bounds.total_deaths_per_million = tdpm;
     bounds.start_date = startDate;
     bounds.end_date = endDate;
-    bounds.total_deaths = td;
-    bounds.new_cases_smoothed_per_million = ncspm;
-    bounds.new_deaths_smoothed_per_million = ndspm;
-    bounds.new_cases_smoothed = ncs;
-    bounds.new_deaths_smoothed = nds;
-    bounds.reproduction_rate = r;
-    bounds.total_vaccinations = tv;
     return [data, bounds];
   }
 
@@ -822,7 +804,7 @@
   // load (main fn)
   d3.csv(url).then(function (raw) {
 
-    [data, bounds] = processRawData(raw);
+    [data, bounds] = processRawData(raw, columns);
 
     startDate = bounds.start_date;
     endDate = bounds.end_date;
@@ -877,7 +859,7 @@
     // make graphs
     [svg_ncs, x_ncs, y_ncs] = makeLine('new_cases_smoothed',
       ncsId, data, width, height, margin, bounds, false);
-    
+
     [svg_nds, x_nds, y_nds] = makeLine('new_deaths_smoothed',
       ndsId, data, width, height, margin, bounds, false);
 
