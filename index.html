@@ -136,6 +136,10 @@
       <div class="col-md-6" id="bubblenew"></div>
     </div>
     <div class="row">
+      <div class="col-md-6" id="linenewcase"></div>
+      <div class="col-md-6" id="linenewdeath"></div>
+    </div>
+    <div class="row">
       <div class="col-md-6" id="linernum"></div>
       <div class="col-md-6" id="totvacc"></div>
     </div>
@@ -168,6 +172,8 @@
     dateId = "#date",
     rnumId = "#linernum",
     vaccId = "#totvacc",
+    ncsId = "#linenewcase",
+    ndsId = "#linenewdeath",
     tabId = "#tabid",
     countryDropDownId = "#country-drop-down",
     sliderId = "#slider";
@@ -188,7 +194,9 @@
 
   // svg & d3 variables
   var svg_tcvd, // total cases v deaths
-    svg_ncvd; // new cases v deaths
+    svg_ncvd, // new cases v deaths
+    svg_ncs,  // new cases smoothed
+    svg_nds;  // new deaths smoothed
 
   var redInterp = d3.interpolateLab("white", "red");
   var blueInterp = d3.interpolateLab("white", "blue");
@@ -216,6 +224,8 @@
     let tcpm = 0,
       tdpm = 0,
       td = 0,
+      ncspm = 0,
+      ndspm = 0,
       ncs = 0,
       nds = 0,
       r = 0,
@@ -254,14 +264,18 @@
         let tcpm_ = parseFloat(vals[j].total_cases_per_million);
         let tdpm_ = parseFloat(vals[j].total_deaths_per_million);
         let td_ = parseFloat(vals[j].total_deaths);
-        let ncs_ = parseFloat(vals[j].new_cases_smoothed_per_million);
-        let nds_ = parseFloat(vals[j].new_deaths_smoothed_per_million);
+        let ncspm_ = parseFloat(vals[j].new_cases_smoothed_per_million);
+        let ndspm_ = parseFloat(vals[j].new_deaths_smoothed_per_million);
+        let ncs_ = parseFloat(vals[j].new_cases_smoothed);
+        let nds_ = parseFloat(vals[j].new_deaths_smoothed);
         let r_ = parseFloat(vals[j].reproduction_rate);
         let tv_ = parseFloat(vals[j].total_vaccinations);
 
         if (tcpm_ > tcpm) tcpm = tcpm_;
         if (tdpm_ > tdpm) tdpm = tdpm_;
         if (td_ > td) td = td_;
+        if (ncspm_ > ncspm) ncspm = ncspm_;
+        if (ndspm_ > ndspm) ndspm = ndspm_;
         if (ncs_ > ncs) ncs = ncs_;
         if (nds_ > nds) nds = nds_;
         if (r_ > r) r = r_;
@@ -290,8 +304,10 @@
     bounds.start_date = startDate;
     bounds.end_date = endDate;
     bounds.total_deaths = td;
-    bounds.new_cases_smoothed_per_million = ncs;
-    bounds.new_deaths_smoothed_per_million = nds;
+    bounds.new_cases_smoothed_per_million = ncspm;
+    bounds.new_deaths_smoothed_per_million = ndspm;
+    bounds.new_cases_smoothed = ncs;
+    bounds.new_deaths_smoothed = nds;
     bounds.reproduction_rate = r;
     bounds.total_vaccinations = tv;
     return [data, bounds];
@@ -856,6 +872,12 @@
     [svg_tab, tbody, headers, columns] = makeTable(tabId, data, width, height, margin);
 
     // make graphs
+    [svg_ncs, x_ncs, y_ncs] = makeLine('new_cases_smoothed',
+      ncsId, data, width, height, margin, bounds, false);
+    
+    [svg_nds, x_nds, y_nds] = makeLine('new_deaths_smoothed',
+      ndsId, data, width, height, margin, bounds, false);
+
     [svg_tcvd, x_tcvd, y_tcvd] = makeBubble("total_cases_per_million",
       "total_deaths_per_million",
       tcvdId, data, width, height, margin, bounds);
@@ -898,6 +920,18 @@
       "yVar": "new_deaths_smoothed_per_million"
     });
 
+    lineSvgs.push({
+      "svg": svg_ncs,
+      "x": x_ncs,
+      "y": y_ncs,
+      "yVar": "new_cases_smoothed"
+    });
+    lineSvgs.push({
+      "svg": svg_nds,
+      "x": x_nds,
+      "y": y_nds,
+      "yVar": "new_deaths_smoothed"
+    });
     lineSvgs.push({
       "svg": svg_rnum,
       "x": x_rnum,
