@@ -723,11 +723,14 @@
 
   function makeSlider(sliderId, totalDays, initVal = 0) {
     let slider_width = $(sliderId).width();
+    // crude hack
+    let ticks = 20;
+    if (slider_width < 600) ticks = 40;
     var slider = d3Slider.sliderHorizontal()
       .domain([0, totalDays])
-      .width(slider_width - 100)
+      .width(slider_width - 10)
       .tickFormat(d3.format('1'))
-      .ticks(totalDays / 20)
+      .ticks(totalDays / ticks)
       .default(initVal)
       .on('onchange', val => {
         update(val)
