@@ -694,10 +694,16 @@
     });
   }
 
+  function windowResize() {
+    // stub
+  }
+
   function makeSlider(sliderId, totalDays) {
+
+    let slider_width = $(sliderId).width();
     var slider = d3Slider.sliderHorizontal()
       .domain([0, totalDays])
-      .width(400)
+      .width(slider_width-100)
       .tickFormat(d3.format('1'))
       .ticks(totalDays / 20)
       .default(0)
@@ -707,7 +713,7 @@
 
     d3.select(sliderId)
       .append("svg")
-      .attr("width", 500)
+      .attr("width", slider_width)
       .attr("height", 60)
       .append('g')
       .attr("transform", "translate(10,10)")
@@ -893,6 +899,8 @@
     // need to draw lines
     let val = slider.value();
     update(val);
+
+    d3.select(window).on('resize', windowResize);
   });
 </script>
 
