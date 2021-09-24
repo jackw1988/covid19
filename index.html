@@ -69,7 +69,7 @@
   }
 
   #date {
-    font-size: 36px;
+    font-size: 4vh;
   }
 
   #main {
@@ -100,6 +100,12 @@
   #topbar {
     background-color: white;
   }
+  
+  button {
+    font-size: 1.5vh !important;
+    padding: 5px !important;
+  }
+
 </style>
 
 <!-- d3 includes -->
@@ -129,10 +135,8 @@
           </button>
           <ul class="dropdown-menu" role="menu" aria-labelledby="menu1" id="country-drop-down">
           </ul>
-          <button id="start" type="button" class="btn btn-primary" onClick="skipTo(0)">
-            <<</button> <button id="end" type="button" class="btn btn-primary" onClick="skipToEnd()">>>
-          </button>
-
+          <button id="start" type="button" class="btn btn-primary" onClick="skipTo(0)"><<</button>
+          <button id="end" type="button" class="btn btn-primary" onClick="skipToEnd()">>></button>
           <br>
           Data source: <a href="https://ourworldindata.org/coronavirus">our world in data</a>. See <a href="https://github.com/jackw1988/covid19">source code</a>. See notes below.
         </div>
@@ -160,7 +164,7 @@
       <div class="col-md-6" id="totvacc"></div>
     </div>
     <div class="row" style="padding-left: 10px;">
-      <p>Line colours are randomly generated, if difficult to see then refresh page. To add a country to the table and plots, choose from the dropdown. The default table consists of nations experiencing different pandemics. Apart from being British, I have no motivation for a particular default. I hope to improve this display.</p>
+      <p>Line colours are randomly generated, if difficult to see then refresh page. To add a country to the table and plots, choose from the dropdown.</p>
       <p>The reproduction rate plot is the Covid-19 R number by country - a measure of the rate of virus transmission. The number of people vaccinated is currently just the absolute value. Once the national vaccination programs become more mature, then I will include per million population statistics.</p>
       <p>Data is taken from source above, no modifications have been made and the accuracy of the numbers is not
         verified - use at own risk. Plots use the smoothed values reported, so will not match exactly to daily reported
@@ -210,7 +214,7 @@
   var bubbleSvgs = [];
   var lineSvgs = [];
   var tableSvgs = [];
-  var labelIndices = [180, 64, 181]; // default for now
+  var labelIndices = []; // default for now
 
   var sliderPlaying = false;
 
@@ -239,7 +243,7 @@
     "new_cases_smoothed",
     "new_deaths_smoothed",
     "reproduction_rate",
-    "total_vaccinations",
+    "total_vaccinations_per_hundred",
   ];
 
   // default columns for table
@@ -282,7 +286,7 @@
 
     // remove the world data
     data = data.filter(function (d) {
-      return d.key !== "World"
+      return !(["World", "South America", "North America", "Europe", "Asia", "European Union"].includes(d.key))
     });
 
     for (let ci = 0; ci < columns.length; ci++) {
@@ -954,7 +958,7 @@
     [svg_rnum, x_rnum, y_rnum] = makeLine('reproduction_rate',
       rnumId, data, width, height, margin, bounds, false);
 
-    [svg_vacc, x_vacc, y_vacc] = makeLine('total_vaccinations',
+    [svg_vacc, x_vacc, y_vacc] = makeLine('total_vaccinations_per_hundred',
       vaccId, data, width, height, margin, bounds, false);
 
     // register tables for updates
@@ -1020,7 +1024,7 @@
       "svg": svg_vacc,
       "x": x_vacc,
       "y": y_vacc,
-      "yVar": "total_vaccinations"
+      "yVar": "total_vaccinations_per_hundred"
     });
 
     // need to draw lines
